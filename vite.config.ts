@@ -1,27 +1,32 @@
-/// <reference types="vitest" />
-// Configure Vitest (https://vitest.dev/config/)
+import {resolve} from 'node:path';
 import {defineConfig} from 'vite';
 import dts from 'vite-plugin-dts';
 
 export default defineConfig({
     build: {
         lib: {
-            entry: 'src/index.ts',
+            // Build both entrypoints
+            entry: {
+                index: resolve(__dirname, 'src/index.ts'),
+                promises: resolve(__dirname, 'src/promises.ts')
+            },
             formats: ['es', 'cjs'],
-            fileName: (format) => `index.${format}.js`
+            fileName: (format, entryName) => `${entryName}.${format}.js`
         },
         rollupOptions: {
-            external: ["crypto"],
+            external: ['crypto']
         },
         sourcemap: true,
         target: 'node22'
     },
-    plugins: [dts(
-        {
+    plugins: [
+        dts({
             compilerOptions: {
-                "stripInternal": false,
-                "removeComments": false
-            }
-        }
-    )]
+                stripInternal: false,
+                removeComments: false
+            },
+            // Ensure both files are included in type generation
+            include: ['src/index.ts', 'src/promises.ts']
+        })
+    ]
 });

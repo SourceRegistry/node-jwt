@@ -1,4 +1,4 @@
-# 🔐 node-jwt
+# 🔐 @sourceregistry/node-jwt
 
 [![npm version](https://img.shields.io/npm/v/@sourceregistry/node-jwt?logo=npm)](https://www.npmjs.com/package/@sourceregistry/node-jwt)
 [![License](https://img.shields.io/npm/l/@sourceregistry/node-jwt)](LICENSE)
@@ -9,11 +9,12 @@ A **minimal**, **secure**, and **production-ready** JWT (JSON Web Token) library
 
 > ✨ **Why another JWT library?**  
 > Most JWT libraries are bloated, have security pitfalls, or lack proper TypeScript support. This library is:
-> - **Tiny**
+> - **Tiny** (~150 LOC core)
 > - **Secure by default** (correct ECDSA/RSA encoding, time validation)
 > - **TypeScript-first** with full JSDoc
 > - **No external dependencies**
 > - **100% test coverage**
+> - **Dual API**: Sync and Promise-based
 
 ---
 
@@ -29,35 +30,50 @@ npm install @sourceregistry/node-jwt
 
 ## 🚀 Quick Start
 
-### Sign a token
+### Sync API (default)
 ```ts
-import { sign } from '@sourceregistry/node-jwt';
+import { sign, verify, decode } from '@sourceregistry/node-jwt';
 
+// Sign
 const token = sign(
   { sub: '1234567890', name: 'John Doe', iat: Math.floor(Date.now() / 1000) },
   'your-secret-key',
   { alg: 'HS256' }
 );
-```
 
-### Verify a token
-```ts
-import { verify } from '@sourceregistry/node-jwt';
-
+// Verify
 const result = verify(token, 'your-secret-key');
-
 if (result.valid) {
   console.log('Payload:', result.payload);
 } else {
   console.error('JWT Error:', result.error.code, result.error.reason);
 }
+
+// Decode (unsafe)
+const { header, payload, signature } = decode(token);
 ```
 
-### Decode (unsafe — no verification)
+### Promise API (`/promises`)
 ```ts
-import { decode } from '@sourceregistry/node-jwt';
+import { sign, verify, decode } from '@sourceregistry/node-jwt/promises';
 
-const { header, payload, signature } = decode(token);
+// Sign
+const token = await sign(
+  { sub: '1234567890', name: 'John Doe', iat: Math.floor(Date.now() / 1000) },
+  'your-secret-key',
+  { alg: 'HS256' }
+);
+
+// Verify
+try {
+  const { payload, header, signature } = await verify(token, 'your-secret-key');
+  console.log('Payload:', payload);
+} catch (error) {
+  console.error('JWT Error:', error.code, error.reason);
+}
+
+// Decode (unsafe)
+const { header, payload, signature } = await decode(token);
 ```
 
 ---
@@ -92,6 +108,16 @@ const { header, payload, signature } = decode(token);
 
 ## 📚 API Reference
 
+### Sync vs Promise API
+
+| Operation | Sync Return | Promise Behavior |
+|----------|-------------|------------------|
+| `sign()` | `string` | Resolves to `string` |
+| `decode()` | `{ header, payload, signature }` | Resolves to same object |
+| `verify()` | `{ valid: true, ... } \| { valid: false, error }` | **Resolves** on success<br>**Rejects** with `{ reason, code }` on failure |
+
+---
+
 ### `sign(payload, secret, options?)`
 Sign a JWT.
 
@@ -102,7 +128,7 @@ Sign a JWT.
     - `kid`: Key ID
     - `typ`: Token type (default: `'JWT'`)
 
-Returns: `string` (JWT)
+**Returns**: `string` (JWT)
 
 ---
 
@@ -115,10 +141,24 @@ Verify and validate a JWT.
     - `ignoreExpiration`: Skip `exp` check (default: `false`)
     - `clockSkew`: Tolerance in seconds for time validation (default: `0`)
 
-Returns:
+#### Sync Usage:
 ```ts
-| { valid: true; header: JWTHeader; payload: JWTPayload; signature: string }
-| { valid: false; error: { reason: string; code: string } }
+const result = verify(token, secret);
+if (result.valid) {
+  // success
+} else {
+  // handle error: result.error
+}
+```
+
+#### Promise Usage:
+```ts
+try {
+  const { header, payload, signature } = await verify(token, secret);
+  // success
+} catch (error) {
+  // handle error: error.reason, error.code
+}
 ```
 
 **Error Codes**:
@@ -137,9 +177,8 @@ Decode a JWT without verification (use with caution!).
 
 - `token`: JWT string
 
-Returns: `{ header, payload, signature }`
-
-Throws on malformed tokens.
+**Returns**: `{ header, payload, signature }`  
+**Throws** on malformed tokens (sync) / **Rejects** (promise)
 
 ---
 
@@ -158,6 +197,20 @@ Tests include:
 - Malformed token handling
 - Signature verification
 - Custom claims
+- **Both sync and promise APIs**
+
+---
+
+## 📦 Exports
+
+This package provides **two entrypoints**:
+
+| Import | Description |
+|-------|-------------|
+| `@sourceregistry/node-jwt` | **Sync API** (default) |
+| `@sourceregistry/node-jwt/promises` | **Promise-based API** |
+
+Both include full TypeScript types and JSDoc.
 
 ---
 
@@ -169,3 +222,8 @@ PRs welcome! Please:
 3. Follow existing code style
 
 Found a security issue? [Report it responsibly](mailto:a.p.a.slaa@projectsource.nl).
+
+---
+
+> 🔗 **GitHub**: [github.com/SourceRegistry/node-jwt](https://github.com/SourceRegistry/node-jwt)  
+> 📦 **npm**: [@sourceregistry/node-jwt](https://www.npmjs.com/package/@sourceregistry/node-jwt)

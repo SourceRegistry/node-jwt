@@ -10,6 +10,11 @@
       "types": "./dist/index.d.ts",
       "import": "./dist/index.es.js",
       "require": "./dist/index.cjs.js"
+    },
+    "./promises": {
+      "types": "./dist/promises.d.ts",
+      "import": "./dist/promises.es.js",
+      "require": "./dist/promises.cjs.js"
     }
   },
   "files": [
