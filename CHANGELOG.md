@@ -1,3 +1,10 @@
+# [1.1.0](https://github.com/SourceRegistry/node-jwt/compare/v1.0.0...v1.1.0) (2025-10-13)
+
+
+### Features
+
+* added promised based wrapper and updated README ([26c24e8](https://github.com/SourceRegistry/node-jwt/commit/26c24e87bd56ce14605eb166102032a0a7941bcb))
+
 # 1.0.0 (2025-10-11)
 
 
