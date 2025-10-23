@@ -1,3 +1,10 @@
+## [1.2.1](https://github.com/SourceRegistry/node-jwt/compare/v1.2.0...v1.2.1) (2025-10-23)
+
+
+### Bug Fixes
+
+* package.json homepage ([48e79f4](https://github.com/SourceRegistry/node-jwt/commit/48e79f4c9a941a300287959a4e247344a6b8a525))
+
 # [1.2.0](https://github.com/SourceRegistry/node-jwt/compare/v1.1.0...v1.2.0) (2025-10-23)
 
 
