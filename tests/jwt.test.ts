@@ -2,7 +2,7 @@ import {describe, expect, it} from 'vitest';
 import {decode, JWTPayload, sign, SignatureAlgorithm, SupportedAlgorithm, verify} from '../src';
 import {generateKeyPairSync, KeyLike} from 'crypto';
 
-// --- Key Setup ---
+// === Key Setup ===
 const hmacSecret = 'my-super-secret';
 const {publicKey: rsaPublicKey, privateKey: rsaPrivateKey} = generateKeyPairSync('rsa', {modulusLength: 2048});
 const {publicKey: ecPublicKey, privateKey: ecPrivateKey} = generateKeyPairSync('ec', {namedCurve: 'P-256'});
@@ -17,7 +17,7 @@ const basePayload: JWTPayload = {
     iat: now,
 };
 
-// --- Algorithm Config Map ---
+// === Algorithm Config Map ===
 const algorithmConfig = {
     HS256: {signKey: hmacSecret, verifyKey: hmacSecret},
     HS384: {signKey: hmacSecret, verifyKey: hmacSecret},
@@ -35,7 +35,7 @@ const algorithmConfig = {
     EdDSA: {signKey: edPrivateKey, verifyKey: edPublicKey},
 } satisfies Record<SupportedAlgorithm, { signKey: KeyLike; verifyKey: KeyLike }>;
 
-// --- Main Test Suite ---
+// === Main Test Suite ===
 describe('JWT Library', () => {
     // === Signing ===
     describe('sign()', () => {
@@ -462,6 +462,7 @@ describe('JWT Library', () => {
 
     });
 
+    // === SignatureAlgorithms ===
     describe('SignatureAlgorithms', () => {
         Object.entries(SignatureAlgorithm).map(([alg, {verify}]) => {
             it(`${alg} verify should return false`, () => {
