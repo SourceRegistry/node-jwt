@@ -41,8 +41,14 @@ export const verify = (
     token: string,
     secret: KeyLike,
     options: {
+        algorithms?: SupportedAlgorithm[]; // Whitelist of allowed algorithms
+        issuer?: string;
+        subject?: string;
+        audience?: string | string[];
+        jwtId?: string;
         ignoreExpiration?: boolean;
-        clockSkew?: number;
+        clockSkew?: number; // in seconds, default 0
+        maxTokenAge?: number; // Maximum age in seconds
     } = {}
 ): Promise<{ header: JWTHeader; payload: JWTPayload; signature: string }> =>
     Promise.resolve().then(() => {

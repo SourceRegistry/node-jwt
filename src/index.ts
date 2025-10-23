@@ -1,7 +1,10 @@
-import {
+import crypto, {
     createHmac,
     createSign,
     createVerify,
+    sign as cryptoSign,
+    verify as cryptoVerify,
+    timingSafeEqual,
     type BinaryLike,
     type KeyLike
 } from 'crypto';
@@ -15,6 +18,14 @@ export const base64Url = {
         // Node.js Buffer handles unpadded base64url since v16, but we normalize for safety
         return Buffer.from(input, 'base64url').toString();
     }
+};
+
+// Timing-safe string comparison to prevent timing attacks
+const timingSafeCompare = (a: string, b: string): boolean => {
+    if (a.length !== b.length) {
+        return false;
+    }
+    return timingSafeEqual(Buffer.from(a), Buffer.from(b));
 };
 
 // Standard JWT payload claims
@@ -51,6 +62,7 @@ export interface JWTPayload {
      * Session ID
      */
     sid?: string;
+
     /**
      * Custom claims
      */
@@ -75,78 +87,229 @@ export const SignatureAlgorithm = {
     HS256: {
         sign: (data: BinaryLike, secret: KeyLike) =>
             createHmac('sha256', secret).update(data).digest('base64url'),
-        verify: (data: BinaryLike, secret: KeyLike, signature: string) =>
-            createHmac('sha256', secret).update(data).digest('base64url') === signature
+        verify: (data: BinaryLike, secret: KeyLike, signature: string) => {
+            const expected = createHmac('sha256', secret).update(data).digest('base64url');
+            return timingSafeCompare(expected, signature);
+        }
     },
     HS384: {
         sign: (data: BinaryLike, secret: KeyLike) =>
             createHmac('sha384', secret).update(data).digest('base64url'),
-        verify: (data: BinaryLike, secret: KeyLike, signature: string) =>
-            createHmac('sha384', secret).update(data).digest('base64url') === signature
+        verify: (data: BinaryLike, secret: KeyLike, signature: string) => {
+            const expected = createHmac('sha384', secret).update(data).digest('base64url');
+            return timingSafeCompare(expected, signature);
+        }
     },
     HS512: {
         sign: (data: BinaryLike, secret: KeyLike) =>
             createHmac('sha512', secret).update(data).digest('base64url'),
-        verify: (data: BinaryLike, secret: KeyLike, signature: string) =>
-            createHmac('sha512', secret).update(data).digest('base64url') === signature
+        verify: (data: BinaryLike, secret: KeyLike, signature: string) => {
+            const expected = createHmac('sha512', secret).update(data).digest('base64url');
+            return timingSafeCompare(expected, signature);
+        }
     },
 
     // RSA (DER-encoded signatures, base64url)
     RS256: {
         sign: (data: BinaryLike, secret: KeyLike) =>
             createSign('RSA-SHA256').update(data).end().sign(secret).toString('base64url'),
-        verify: (data: BinaryLike, secret: KeyLike, signature: string) =>
-            createVerify('RSA-SHA256')
-                .update(data)
-                .end()
-                .verify(secret, Buffer.from(signature, 'base64url'))
+        verify: (data: BinaryLike, secret: KeyLike, signature: string) => {
+            try {
+                return createVerify('RSA-SHA256')
+                    .update(data)
+                    .end()
+                    .verify(secret, Buffer.from(signature, 'base64url'));
+            } catch {
+                return false;
+            }
+        }
     },
     RS384: {
         sign: (data: BinaryLike, secret: KeyLike) =>
             createSign('RSA-SHA384').update(data).end().sign(secret).toString('base64url'),
-        verify: (data: BinaryLike, secret: KeyLike, signature: string) =>
-            createVerify('RSA-SHA384')
-                .update(data)
-                .end()
-                .verify(secret, Buffer.from(signature, 'base64url'))
+        verify: (data: BinaryLike, secret: KeyLike, signature: string) => {
+            try {
+                return createVerify('RSA-SHA384')
+                    .update(data)
+                    .end()
+                    .verify(secret, Buffer.from(signature, 'base64url'));
+            } catch {
+                return false;
+            }
+        }
     },
     RS512: {
         sign: (data: BinaryLike, secret: KeyLike) =>
             createSign('RSA-SHA512').update(data).end().sign(secret).toString('base64url'),
-        verify: (data: BinaryLike, secret: KeyLike, signature: string) =>
-            createVerify('RSA-SHA512')
-                .update(data)
-                .end()
-                .verify(secret, Buffer.from(signature, 'base64url'))
+        verify: (data: BinaryLike, secret: KeyLike, signature: string) => {
+            try {
+                return createVerify('RSA-SHA512')
+                    .update(data)
+                    .end()
+                    .verify(secret, Buffer.from(signature, 'base64url'));
+            } catch {
+                return false;
+            }
+        }
     },
 
     // ECDSA (DER-encoded by default — no dsaEncoding!)
     ES256: {
         sign: (data: BinaryLike, secret: KeyLike) =>
             createSign('SHA256').update(data).end().sign(secret).toString('base64url'),
-        verify: (data: BinaryLike, secret: KeyLike, signature: string) =>
-            createVerify('SHA256')
-                .update(data)
-                .end()
-                .verify(secret, Buffer.from(signature, 'base64url'))
+        verify: (data: BinaryLike, secret: KeyLike, signature: string) => {
+            try {
+                return createVerify('SHA256')
+                    .update(data)
+                    .end()
+                    .verify(secret, Buffer.from(signature, 'base64url'));
+            } catch {
+                return false;
+            }
+        }
     },
     ES384: {
         sign: (data: BinaryLike, secret: KeyLike) =>
             createSign('SHA384').update(data).end().sign(secret).toString('base64url'),
-        verify: (data: BinaryLike, secret: KeyLike, signature: string) =>
-            createVerify('SHA384')
-                .update(data)
-                .end()
-                .verify(secret, Buffer.from(signature, 'base64url'))
+        verify: (data: BinaryLike, secret: KeyLike, signature: string) => {
+            try {
+                return createVerify('SHA384')
+                    .update(data)
+                    .end()
+                    .verify(secret, Buffer.from(signature, 'base64url'));
+            } catch {
+                return false;
+            }
+        }
     },
     ES512: {
         sign: (data: BinaryLike, secret: KeyLike) =>
             createSign('SHA512').update(data).end().sign(secret).toString('base64url'),
-        verify: (data: BinaryLike, secret: KeyLike, signature: string) =>
-            createVerify('SHA512')
+        verify: (data: BinaryLike, secret: KeyLike, signature: string) => {
+            try {
+                return createVerify('SHA512')
+                    .update(data)
+                    .end()
+                    .verify(secret, Buffer.from(signature, 'base64url'));
+            } catch {
+                return false;
+            }
+        }
+    },
+    ES256K: {
+        sign: (data: BinaryLike, secret: KeyLike) =>
+            createSign('SHA256').update(data).end().sign(secret).toString('base64url'),
+        verify: (data: BinaryLike, secret: KeyLike, signature: string) => {
+            try {
+                return createVerify('SHA256')
+                    .update(data)
+                    .end()
+                    .verify(secret, Buffer.from(signature, 'base64url'));
+            } catch {
+                return false;
+            }
+        }
+    },
+    PS256: {
+        sign: (data: BinaryLike, secret: KeyLike) =>
+            createSign('RSA-SHA256')
                 .update(data)
                 .end()
-                .verify(secret, Buffer.from(signature, 'base64url'))
+                .sign({
+                    //@ts-ignore
+                    key: secret,
+                    padding: crypto.constants.RSA_PKCS1_PSS_PADDING,
+                    saltLength: 32
+                })
+                .toString('base64url'),
+        verify: (data: BinaryLike, secret: KeyLike, signature: string) => {
+            try {
+                return createVerify('RSA-SHA256')
+                    .update(data)
+                    .end()
+                    .verify({
+                        //@ts-ignore
+                        key: secret,
+                        padding: crypto.constants.RSA_PKCS1_PSS_PADDING,
+                        saltLength: 32
+                    }, Buffer.from(signature, 'base64url'));
+            } catch {
+                return false;
+            }
+        }
+    },
+    PS384: {
+        sign: (data: BinaryLike, secret: KeyLike) =>
+            createSign('RSA-SHA384')
+                .update(data)
+                .end()
+                .sign({
+                    //@ts-ignore
+                    key: secret,
+                    padding: crypto.constants.RSA_PKCS1_PSS_PADDING,
+                    saltLength: 48
+                })
+                .toString('base64url'),
+        verify: (data: BinaryLike, secret: KeyLike, signature: string) => {
+            try {
+                return createVerify('RSA-SHA384')
+                    .update(data)
+                    .end()
+                    .verify({
+                        //@ts-ignore
+                        key: secret,
+                        padding: crypto.constants.RSA_PKCS1_PSS_PADDING,
+                        saltLength: 48
+                    }, Buffer.from(signature, 'base64url'));
+            } catch {
+                return false;
+            }
+        }
+    },
+    PS512: {
+        sign: (data: BinaryLike, secret: KeyLike) =>
+            createSign('RSA-SHA512')
+                .update(data)
+                .end()
+                .sign({
+                    //@ts-ignore
+                    key: secret,
+                    padding: crypto.constants.RSA_PKCS1_PSS_PADDING,
+                    saltLength: 64
+                })
+                .toString('base64url'),
+        verify: (data: BinaryLike, secret: KeyLike, signature: string) => {
+            try {
+                return createVerify('RSA-SHA512')
+                    .update(data)
+                    .end()
+                    .verify({
+                        //@ts-ignore
+                        key: secret,
+                        padding: crypto.constants.RSA_PKCS1_PSS_PADDING,
+                        saltLength: 64
+                    }, Buffer.from(signature, 'base64url'));
+            } catch {
+                return false;
+            }
+        }
+    },
+    EdDSA: {
+        sign: (data: BinaryLike, secret: KeyLike) =>
+            cryptoSign(null, typeof data === 'string' ? Buffer.from(data, 'utf8') : data, secret)
+                .toString('base64url'),
+        verify: (data: BinaryLike, secret: KeyLike, signature: string) => {
+            try {
+                return cryptoVerify(
+                    null,
+                    typeof data === 'string' ? Buffer.from(data, 'utf8') : data,
+                    secret,
+                    Buffer.from(signature, 'base64url')
+                );
+            } catch {
+                return false;
+            }
+        }
     }
 } as const;
 
@@ -172,7 +335,7 @@ export const decode = (token: string): JWT => {
     try {
         const header = JSON.parse(base64Url.decode(headerPart)) as JWTHeader;
         const payload = JSON.parse(base64Url.decode(payloadPart)) as JWTPayload;
-        return { header, payload, signature };
+        return {header, payload, signature};
     } catch (err) {
         throw new Error(`Invalid JWT: malformed header or payload (${(err as Error).message})`);
     }
@@ -197,7 +360,7 @@ export const sign = (
         throw new Error(`Unsupported algorithm: ${alg}`);
     }
 
-    const header: JWTHeader = { alg, typ };
+    const header: JWTHeader = {alg, typ};
     if (options.kid) header.kid = options.kid;
 
     const headerEncoded = base64Url.encode(JSON.stringify(header));
@@ -216,8 +379,14 @@ export const verify = (
     token: string,
     secret: KeyLike,
     options: {
+        algorithms?: SupportedAlgorithm[]; // Whitelist of allowed algorithms
+        issuer?: string;
+        subject?: string;
+        audience?: string | string[];
+        jwtId?: string;
         ignoreExpiration?: boolean;
         clockSkew?: number; // in seconds, default 0
+        maxTokenAge?: number; // Maximum age in seconds
     } = {}
 ):
     | { valid: true; header: JWTHeader; payload: JWTPayload; signature: string }
@@ -235,7 +404,7 @@ export const verify = (
         };
     }
 
-    const { header, payload, signature } = decoded;
+    const {header, payload, signature} = decoded;
 
     // Validate algorithm
     const alg = header.alg as SupportedAlgorithm;
@@ -249,8 +418,21 @@ export const verify = (
         };
     }
 
-    // Optional: validate 'typ' header
-    if (header.typ && header.typ !== 'JWT') {
+    // Algorithm whitelist validation (prevents algorithm confusion attacks)
+    if (options.algorithms && options.algorithms.length > 0) {
+        if (!options.algorithms.includes(alg)) {
+            return {
+                valid: false,
+                error: {
+                    reason: `Algorithm "${alg}" is not in the allowed algorithms list`,
+                    code: 'ALGORITHM_NOT_ALLOWED'
+                }
+            };
+        }
+    }
+
+    // Validate 'typ' header (must be 'JWT' if present)
+    if (header.typ !== undefined && header.typ !== 'JWT') {
         return {
             valid: false,
             error: {
@@ -310,10 +492,120 @@ export const verify = (
         };
     }
 
-    return { valid: true, header, payload, signature };
+    // Maximum token age validation
+    if (options.maxTokenAge !== undefined && payload.iat !== undefined) {
+        const tokenAge = now - payload.iat;
+        if (tokenAge > options.maxTokenAge) {
+            return {
+                valid: false,
+                error: {
+                    reason: `Token age (${tokenAge}s) exceeds maximum allowed age (${options.maxTokenAge}s)`,
+                    code: 'TOKEN_TOO_OLD'
+                }
+            };
+        }
+    }
+
+    // --- Claim validations (only if options provided) ---
+
+    // Issuer (`iss`)
+    if (options.issuer !== undefined) {
+        if (payload.iss === undefined) {
+            return {
+                valid: false,
+                error: {
+                    reason: 'Token missing required issuer claim ("iss")',
+                    code: 'MISSING_ISSUER'
+                }
+            };
+        }
+        if (options.issuer !== payload.iss) {
+            return {
+                valid: false,
+                error: {
+                    reason: `Invalid token issuer: expected "${options.issuer}", got "${payload.iss}"`,
+                    code: 'INVALID_ISSUER'
+                }
+            };
+        }
+    }
+
+    // Subject (`sub`)
+    if (options.subject !== undefined) {
+        if (payload.sub === undefined) {
+            return {
+                valid: false,
+                error: {
+                    reason: 'Token missing required subject claim ("sub")',
+                    code: 'MISSING_SUBJECT'
+                }
+            };
+        }
+        if (options.subject !== payload.sub) {
+            return {
+                valid: false,
+                error: {
+                    reason: `Invalid token subject: expected "${options.subject}", got "${payload.sub}"`,
+                    code: 'INVALID_SUBJECT'
+                }
+            };
+        }
+    }
+
+    // Audience (`aud`)
+    if (options.audience !== undefined) {
+        const aud = payload.aud;
+        if (aud === undefined) {
+            return {
+                valid: false,
+                error: {
+                    reason: 'Token missing required audience claim ("aud")',
+                    code: 'MISSING_AUDIENCE'
+                }
+            };
+        }
+
+        const expectedAud = Array.isArray(options.audience) ? options.audience : [options.audience];
+        const tokenAud = Array.isArray(aud) ? aud : [aud];
+
+        const hasMatch = expectedAud.some(a => tokenAud.includes(a));
+        if (!hasMatch) {
+            return {
+                valid: false,
+                error: {
+                    reason: 'Audience claim mismatch',
+                    code: 'INVALID_AUDIENCE'
+                }
+            };
+        }
+    }
+
+    // JWT ID (`jti`)
+    if (options.jwtId !== undefined) {
+        if (payload.jti === undefined) {
+            return {
+                valid: false,
+                error: {
+                    reason: 'Token missing required JWT ID claim ("jti")',
+                    code: 'MISSING_JTI'
+                }
+            };
+        }
+        if (options.jwtId !== payload.jti) {
+            return {
+                valid: false,
+                error: {
+                    reason: `Invalid JWT ID: expected "${options.jwtId}", got "${payload.jti}"`,
+                    code: 'INVALID_JTI'
+                }
+            };
+        }
+    }
+
+    return {valid: true, header, payload, signature};
 };
 
-// Optional: namespace export (not default)
+// Optional: namespace export
 export const JWT = {
     sign,
     verify,
