@@ -1,3 +1,10 @@
+# [1.2.0](https://github.com/SourceRegistry/node-jwt/compare/v1.1.0...v1.2.0) (2025-10-23)
+
+
+### Features
+
+* added validation options and wider range of algorithms ([f5a2060](https://github.com/SourceRegistry/node-jwt/commit/f5a2060ddb4f2c4bc09d5d56ad311f52964f4fc3))
+
 # [1.1.0](https://github.com/SourceRegistry/node-jwt/compare/v1.0.0...v1.1.0) (2025-10-13)
 
 
