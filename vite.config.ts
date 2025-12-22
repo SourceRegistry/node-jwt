@@ -26,7 +26,7 @@ export default defineConfig({
                 removeComments: false
             },
             // Ensure both files are included in type generation
-            include: ['src/index.ts', 'src/promises.ts']
+            include: ['src/index.ts', 'src/promises.ts', 'src/jwks/index.ts', 'src/jwks/promises.ts', 'src/jwt/index.ts', 'src/jwt/promises.ts']
         })
     ]
 });
