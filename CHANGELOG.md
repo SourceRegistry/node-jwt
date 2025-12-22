@@ -1,3 +1,10 @@
+# [1.3.0](https://github.com/SourceRegistry/node-jwt/compare/v1.2.1...v1.3.0) (2025-12-22)
+
+
+### Features
+
+* added JWKS and JWK functionality also added automatic sign algorithm detection ([a81563a](https://github.com/SourceRegistry/node-jwt/commit/a81563a19a696aadde670c7872406c725efba855))
+
 ## [1.2.1](https://github.com/SourceRegistry/node-jwt/compare/v1.2.0...v1.2.1) (2025-10-23)
 
 
