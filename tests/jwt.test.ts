@@ -327,6 +327,33 @@ describe('JWT Library', () => {
                 if (!result.valid) expect(result.error.code).toBe('INVALID_ISSUER');
             });
         });
+
+        // --- Edge cases ---
+        it('should return INVALID_TOKEN for malformed JWT', () => {
+            const result = verify('this.is.invalid', 'secret');
+
+            expect(result.valid).toBe(false);
+            if (!result.valid) {
+                expect(result.error.code).toBe('INVALID_TOKEN');
+                expect(result.error.reason).toMatch(/Invalid JWT/);
+            }
+        });
+
+        it('should return INVALID_TOKEN for malformed header JSON', () => {
+            // header = invalid JSON after base64 decoding
+            const badToken =
+                'eyJhbGciOiJIUzI1NiJ9.' + // valid header
+                '!!!.' +                  // invalid payload
+                'signature';
+
+            const result = verify(badToken, 'secret');
+
+            expect(result.valid).toBe(false);
+            if (!result.valid) {
+                expect(result.error.code).toBe('INVALID_TOKEN');
+                expect(result.error.reason).toMatch(/Invalid JWT/);
+            }
+        });
     });
 
     // === Claim Validation ===
@@ -470,6 +497,20 @@ describe('JWT Library', () => {
             });
         })
 
+        it('should throw for unsupported RSA-PSS hash algorithm', () => {
+            // @ts-ignore
+            const { privateKey } = generateKeyPairSync('rsa-pss', {
+                modulusLength: 2048,
+                hashAlgorithm: 'sha1', // explicitly unsupported
+                saltLength: 20
+            });
+
+            expect(() => {
+                sign({ sub: 'test' }, privateKey);
+            }).toThrowError('Unsupported RSA-PSS hash algorithm: sha1');
+        });
+
+
         describe('EdDSA special signature test', () => {
             const {signKey, verifyKey} = algorithmConfig['EdDSA'];
             const {sign, verify} = SignatureAlgorithm.EdDSA;
@@ -485,4 +526,154 @@ describe('JWT Library', () => {
         })
 
     });
+
+    // === Auto-detection tests ===
+    describe('Auto-detection of Algorithm', () => {
+        it('should auto-detect HS256 for string secret', () => {
+            const token = sign(basePayload, hmacSecret); // no alg
+            const { header } = decode(token);
+            expect(header.alg).toBe('HS256');
+        });
+
+        it('should auto-detect HS256 for Buffer secret', () => {
+            const token = sign(basePayload, Buffer.from(hmacSecret)); // no alg
+            const { header } = decode(token);
+            expect(header.alg).toBe('HS256');
+        });
+
+        it('should auto-detect RS256 for RSA private key', () => {
+            const token = sign(basePayload, rsaPrivateKey); // no alg
+            const { header } = decode(token);
+            expect(header.alg).toBe('RS256');
+        });
+
+        it('should auto-detect ES256 for P-256 EC private key', () => {
+            const token = sign(basePayload, ecPrivateKey); // no alg
+            const { header } = decode(token);
+            expect(header.alg).toBe('ES256');
+        });
+
+        it('should auto-detect ES256K for secp256k1 private key', () => {
+            const token = sign(basePayload, k1PrivateKey); // no alg
+            const { header } = decode(token);
+            expect(header.alg).toBe('ES256K');
+        });
+
+        it('should auto-detect EdDSA for Ed25519 private key', () => {
+            const token = sign(basePayload, edPrivateKey); // no alg
+            const { header } = decode(token);
+            expect(header.alg).toBe('EdDSA');
+        });
+
+        // RSA-PSS tests
+        // @ts-ignore
+        const rsaPss256 = generateKeyPairSync('rsa-pss', {
+            modulusLength: 2048,
+            hashAlgorithm: 'sha256',
+            saltLength: 32
+        });
+
+        // @ts-ignore
+        const rsaPss384 = generateKeyPairSync('rsa-pss', {
+            modulusLength: 2048,
+            hashAlgorithm: 'sha384',
+            saltLength: 48
+        });
+
+        // @ts-ignore
+        const rsaPss512 = generateKeyPairSync('rsa-pss', {
+            modulusLength: 2048,
+            hashAlgorithm: 'sha512',
+            saltLength: 64
+        });
+
+        it('should auto-detect PS256 for RSA-PSS (SHA-256)', () => {
+            const token = sign(basePayload, rsaPss256.privateKey); // no alg
+            const { header } = decode(token);
+            expect(header.alg).toBe('PS256');
+        });
+
+        it('should auto-detect PS384 for RSA-PSS (SHA-384)', () => {
+            const token = sign(basePayload, rsaPss384.privateKey); // no alg
+            const { header } = decode(token);
+            expect(header.alg).toBe('PS384');
+        });
+
+        it('should auto-detect PS512 for RSA-PSS (SHA-512)', () => {
+            const token = sign(basePayload, rsaPss512.privateKey); // no alg
+            const { header } = decode(token);
+            expect(header.alg).toBe('PS512');
+        });
+
+
+        //Unsupported RSA-PSS hash algorithm
+        it('should throw for unsupported asymmetric key type', () => {
+            const { privateKey } = generateKeyPairSync('dsa', {
+                modulusLength: 2048,
+                divisorLength: 224
+            });
+
+            expect(() => {
+                sign({ sub: 'test' }, privateKey);
+            }).toThrowError('Unsupported asymmetric key type: dsa');
+        });
+
+        // Edge case: ensure public key fails
+        it('should reject public key for signing (auto-detect)', () => {
+            expect(() => sign(basePayload, rsaPublicKey)).toThrow('Only private or symmetric keys');
+        });
+
+
+        //EC Autodection (ESxxx)
+
+        it('should auto-detect ES384 for P-384 EC private key', () => {
+            const { privateKey } = generateKeyPairSync('ec', {
+                namedCurve: 'secp384r1'
+            });
+
+            const token = sign({ sub: 'test' }, privateKey);
+            const { header } = decode(token);
+
+            expect(header.alg).toBe('ES384');
+        });
+
+        it('should auto-detect ES512 for P-521 EC private key', () => {
+            const { privateKey } = generateKeyPairSync('ec', {
+                namedCurve: 'secp521r1'
+            });
+
+            const token = sign({ sub: 'test' }, privateKey);
+            const { header } = decode(token);
+
+            expect(header.alg).toBe('ES512');
+        });
+
+
+        it('should throw for unsupported EC curve', () => {
+            const { privateKey } = generateKeyPairSync('ec', {
+                namedCurve: 'secp224r1' // valid OpenSSL curve, unsupported by JWT
+            });
+
+            expect(() => {
+                sign({ sub: 'test' }, privateKey);
+            }).toThrowError('Unsupported EC curve: secp224r1');
+        });
+
+        //Unsupported asymmetric key type
+        it('should throw for unsupported asymmetric key type', () => {
+            const { privateKey } = generateKeyPairSync('dsa', {
+                modulusLength: 2048,
+                divisorLength: 224
+            });
+
+            expect(() => {
+                sign({ sub: 'test' }, privateKey);
+            }).toThrowError('Unsupported asymmetric key type: dsa');
+        });
+    });
+
+
+
+
+
 });

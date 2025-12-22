@@ -1,40 +1,47 @@
 # 🔐 @sourceregistry/node-jwt
+
 [![npm version](https://img.shields.io/npm/v/@sourceregistry/node-jwt?logo=npm)](https://www.npmjs.com/package/@sourceregistry/node-jwt)
 [![License](https://img.shields.io/npm/l/@sourceregistry/node-jwt)](https://github.com/SourceRegistry/node-jwt/blob/main/LICENSE)
 [![CI](https://github.com/SourceRegistry/node-jwt/actions/workflows/test.yml/badge.svg)](https://github.com/SourceRegistry/node-jwt/actions)
 [![Codecov](https://img.shields.io/codecov/c/github/SourceRegistry/node-jwt)](https://codecov.io/gh/SourceRegistry/node-jwt)
 
-A minimal, secure, and production-ready JWT (JSON Web Token) library for Node.js with zero dependencies. Supports all standard signing algorithms (HMAC, RSA, ECDSA, EdDSA, RSASSA-PSS) and full claim validation.
+A minimal, secure, and production-ready JWT (JSON Web Token) library for Node.js with zero dependencies. Supports all standard signing algorithms (HMAC, RSA, ECDSA, EdDSA, RSASSA-PSS), **automatic algorithm detection**, **JWK/JWKS**, and full claim validation.
 
-✨ **Why another JWT library?**  
+✨ **Why another JWT library?**
 Most JWT libraries are bloated, have security pitfalls, or lack proper TypeScript support. This library is:
 
-- **Tiny**
-- **Secure by default** (correct ECDSA/RSA/PSS/EdDSA encoding, time validation, algorithm whitelisting)
-- **TypeScript-first** with full JSDoc
-- **No external dependencies**
-- **100% test coverage**
-- **Dual API**: Sync and Promise-based
+* **Tiny**
+* **Secure by default**
+* **TypeScript-first** with full JSDoc
+* **Zero external dependencies**
+* **100% test coverage**
+* **Dual API**: Sync and Promise-based
+* **Automatic algorithm detection based on key type**
+* **Full JWK/JWKS support** (`import/export`, `toPublicJWK`, `x5c/x5t`, RFC 7638 thumbprints, kid-based key selection)
 
-📦 **Installation**
+---
+
+## 📦 Installation
+
 ```bash
 npm install @sourceregistry/node-jwt
 ```
+
 Requires Node.js ≥ 16
 
 ---
 
-🚀 **Quick Start**
+## 🚀 Quick Start
 
 ### Sync API (default)
+
 ```ts
 import { sign, verify, decode } from '@sourceregistry/node-jwt';
 
-// Sign
+// Sign (algorithm auto-detected)
 const token = sign(
   { sub: '1234567890', name: 'John Doe', iat: Math.floor(Date.now() / 1000) },
-  'your-secret-key',
-  { alg: 'HS256' }
+  'your-secret-key'
 );
 
 // Verify
@@ -50,19 +57,19 @@ const { header, payload, signature } = decode(token);
 ```
 
 ### Promise API (`/promises`)
+
 ```ts
 import { sign, verify, decode } from '@sourceregistry/node-jwt/promises';
 
-// Sign
+// Sign (algorithm auto-detected)
 const token = await sign(
   { sub: '1234567890', name: 'John Doe', iat: Math.floor(Date.now() / 1000) },
-  'your-secret-key',
-  { alg: 'HS256' }
+  'your-secret-key'
 );
 
 // Verify
 try {
-  const { payload, header, signature } = await verify(token, 'your-secret-key', {
+  const { payload } = await verify(token, 'your-secret-key', {
     issuer: 'https://example.com',
     audience: 'my-app',
     algorithms: ['HS256']
@@ -78,172 +85,146 @@ const { header, payload, signature } = await decode(token);
 
 ---
 
-🔑 **Supported Algorithms**
+## 🧠 Algorithm Autodetection (New)
 
-| Algorithm   | Type         | Secret Type                              |
-|-------------|--------------|------------------------------------------|
-| HS256       | HMAC         | `string \| Buffer`                       |
-| HS384       | HMAC         | `string \| Buffer`                       |
-| HS512       | HMAC         | `string \| Buffer`                       |
-| RS256       | RSA          | Private key (sign), Public key (verify)  |
-| RS384       | RSA          | Private key (sign), Public key (verify)  |
-| RS512       | RSA          | Private key (sign), Public key (verify)  |
-| PS256       | RSA-PSS      | Private key (sign), Public key (verify)  |
-| PS384       | RSA-PSS      | Private key (sign), Public key (verify)  |
-| PS512       | RSA-PSS      | Private key (sign), Public key (verify)  |
-| ES256       | ECDSA        | Private key (sign), Public key (verify)  |
-| ES384       | ECDSA        | Private key (sign), Public key (verify)  |
-| ES512       | ECDSA        | Private key (sign), Public key (verify)  |
-| ES256K      | ECDSA (secp256k1) | Private key (sign), Public key (verify) |
-| EdDSA       | Ed25519      | Private key (sign), Public key (verify)  |
+When `options.alg` is **omitted**, the library automatically selects the correct JWT algorithm **based on the signing key**.
 
-> 💡 Keys must be in PEM format or as Node.js `KeyObject` (e.g., from `crypto.generateKeyPairSync`).
+### 🔑 Autodetection Rules
 
----
+| Key Type                        | Detection Logic       | Selected Algorithm          |
+| ------------------------------- | --------------------- | --------------------------- |
+| Symmetric (`string` / `Buffer`) | Default HMAC          | `HS256`                     |
+| RSA private key                 | PKCS#1 v1.5           | `RS256`                     |
+| RSA-PSS private key             | Hash algorithm in key | `PS256` / `PS384` / `PS512` |
+| EC P-256 (`prime256v1`)         | Curve name            | `ES256`                     |
+| EC P-384 (`secp384r1`)          | Curve name            | `ES384`                     |
+| EC P-521 (`secp521r1`)          | Curve name            | `ES512`                     |
+| EC secp256k1                    | Curve name            | `ES256K`                    |
+| Ed25519                         | Key type              | `EdDSA`                     |
 
-🛡️ **Security Features**
+> 💡 Node.js exposes OpenSSL curve names (`prime256v1`, `secp384r1`, etc.).
+> These are automatically normalized to JOSE algorithms.
 
-✅ Correct ECDSA signatures (DER-encoded, not IEEE P1363)  
-✅ Full RSASSA-PSS and Ed25519 support  
-✅ Strict algorithm validation with **whitelist** (`algorithms` option) to prevent algorithm confusion  
-✅ Time claim validation (`exp`, `nbf`, `iat`) with **clock skew** tolerance  
-✅ Optional validation for:  
- • Issuer (`iss`)  
- • Subject (`sub`)  
- • Audience (`aud`)  
- • JWT ID (`jti`)  
-✅ Maximum token age enforcement (`maxTokenAge`)  
-✅ Type header enforcement (`typ: 'JWT'`)  
-✅ Timing-safe signature comparison  
-✅ No unsafe defaults
+### ❌ Autodetection Errors
+
+Autodetection fails for unsupported keys:
+
+* Unsupported EC curve
+* Unsupported RSA-PSS hash algorithm (e.g. `sha1`)
+* Unsupported asymmetric key type (e.g. DSA)
 
 ---
 
-📚 **API Reference**
+## 🔑 Supported Algorithms
 
-### Sync vs Promise API
+| Algorithm             | Type              | Secret Type          |
+| --------------------- | ----------------- | -------------------- |
+| HS256 / HS384 / HS512 | HMAC              | `string \| Buffer`   |
+| RS256 / RS384 / RS512 | RSA               | Private / Public key |
+| PS256 / PS384 / PS512 | RSA-PSS           | Private / Public key |
+| ES256 / ES384 / ES512 | ECDSA             | Private / Public key |
+| ES256K                | ECDSA (secp256k1) | Private / Public key |
+| EdDSA                 | Ed25519           | Private / Public key |
 
-| Operation | Sync Return | Promise Behavior |
-|----------|-------------|------------------|
-| `sign()` | `string` | Resolves to `string` |
-| `decode()` | `{ header, payload, signature }` | Resolves to same object |
-| `verify()` | `{ valid: true, ... } \| { valid: false, error }` | **Resolves** on success<br>**Rejects** with `{ reason, code }` on failure |
+> Keys may be PEM, DER, JWK, or Node.js `KeyObject`.
 
 ---
+
+## 🧩 JWK / JWKS Support
+
+* Import/export **JWK**: `importJWK()`, `exportJWK()`
+* Convert to **public-only JWK**: `toPublicJWK()`
+* Compute **RFC 7638 thumbprint**: `getJWKThumbprint()`
+* Support **x5c/x5t** (X.509 cert chain + SHA-1 thumbprint)
+* Normalize **JWKS** with auto-generated `kid` and `x5t`
+* Resolve keys from **JWKS** by `kid` for verification
+
+### 🔹 Example: JWKS Key Selection
+
+```ts
+import { JWKS, JWK } from '@sourceregistry/node-jwt';
+
+const keyPair = generateKeyPairSync('rsa', { modulusLength: 2048 });
+const jwk = JWK.toPublic(keyPair.publicKey);
+const jwks = JWKS.normalize({ keys: [jwk] });
+
+// Retrieve key by kid
+const keyObject = JWKS.toKeyObject(jwks, jwk.kid);
+```
+---
+
+## 🛡️ Security Features
+
+* ✅ Safe algorithm autodetection
+* ✅ Strict algorithm whitelisting (`algorithms` option)
+* ✅ Full RSASSA-PSS and Ed25519 support
+* ✅ Time claim validation (`exp`, `nbf`, `iat`) with clock skew
+* ✅ Claim validation (`iss`, `sub`, `aud`, `jti`)
+* ✅ Maximum token age enforcement
+* ✅ Timing-safe signature comparison
+* ✅ No insecure defaults
+
+---
+
+## 📚 API Reference
 
 ### `sign(payload, secret, options?)`
-Sign a JWT.
 
-- `payload`: `JWTPayload` object
-- `secret`: Key for signing (type depends on algorithm)
-- `options`:
-    - `alg`: Algorithm (default: `'HS256'`)
-    - `kid`: Key ID
-    - `typ`: Token type (default: `'JWT'`)
-
-Returns: `string` (JWT)
-
----
+* `alg` *(optional)* — If omitted, algorithm is auto-detected
+* `kid` — Key ID
+* `typ` — Token type (default: `"JWT"`)
 
 ### `verify(token, secret, options?)`
-Verify and validate a JWT.
 
-- `token`: JWT string
-- `secret`: Key for verification
-- `options`:
-    - `algorithms`: Array of allowed algorithms (e.g., `['HS256', 'RS256']`)
-    - `issuer`: Required value for the `iss` claim
-    - `subject`: Required value for the `sub` claim
-    - `audience`: Required value(s) for the `aud` claim (`string` or `string[]`)
-    - `jwtId`: Required value for the `jti` claim
-    - `ignoreExpiration`: Skip `exp` check (default: `false`)
-    - `clockSkew`: Tolerance in seconds for time validation (default: `0`)
-    - `maxTokenAge`: Maximum allowed token age in seconds (from `iat`)
+Includes algorithm whitelist protection and full claim validation.
 
-#### Sync Usage:
-```ts
-const result = verify(token, secret, { issuer: 'https://example.com' });
-if (result.valid) {
-  // success
-} else {
-  // handle error: result.error
-}
-```
+**Error Codes include:**
 
-#### Promise Usage:
-```ts
-try {
-  const { header, payload, signature } = await verify(token, secret, { issuer: 'https://example.com' });
-  // success
-} catch (error) {
-  // handle error: error.reason, error.code
-}
-```
-
-#### Error Codes:
-- `INVALID_TOKEN`: Malformed token structure
-- `INVALID_ALGORITHM`: Unsupported algorithm
-- `ALGORITHM_NOT_ALLOWED`: Algorithm not in allowed list
-- `INVALID_TYPE`: Invalid `typ` header
-- `INVALID_SIGNATURE`: Signature mismatch
-- `TOKEN_EXPIRED`: `exp` claim exceeded
-- `TOKEN_NOT_ACTIVE`: `nbf` claim not reached
-- `TOKEN_FUTURE_ISSUED`: `iat` claim in future
-- `TOKEN_TOO_OLD`: Token age exceeds `maxTokenAge`
-- `MISSING_ISSUER` / `INVALID_ISSUER`
-- `MISSING_SUBJECT` / `INVALID_SUBJECT`
-- `MISSING_AUDIENCE` / `INVALID_AUDIENCE`
-- `MISSING_JTI` / `INVALID_JTI`
-
----
+* `INVALID_TOKEN`
+* `INVALID_ALGORITHM`
+* `ALGORITHM_NOT_ALLOWED`
+* `INVALID_SIGNATURE`
+* `TOKEN_EXPIRED`
+* `TOKEN_NOT_ACTIVE`
+* `TOKEN_TOO_OLD`
+* `MISSING_*` / `INVALID_*`
 
 ### `decode(token)`
-Decode a JWT without verification (**use with caution!**).
 
-- `token`: JWT string
-- Returns: `{ header, payload, signature }`
-- Throws on malformed tokens (sync) / Rejects (promise)
+Decode a JWT without verification (**unsafe**).
 
 ---
 
-🧪 **Testing**
-This library has 100% test coverage with Vitest:
+## 🧪 Testing
+
+* 100% branch coverage
+* All algorithms + autodetection paths
+* All failure modes
+* Sync + Promise APIs
+* Full JWK/JWKS coverage (import/export, x5c/x5t, thumbprint, kid selection)
+
 ```bash
 npm test
 npm run test:coverage
 ```
 
-Tests include:
-- All algorithms (HMAC, RSA, ECDSA, EdDSA, PSS)
-- Time validation (`exp`, `nbf`, `iat`, `clockSkew`, `maxTokenAge`)
-- Claim validation (`iss`, `sub`, `aud`, `jti`)
-- Algorithm whitelisting
-- Malformed token handling
-- Signature verification (including timing-safe comparison)
-- Custom claims
-- Both sync and promise APIs
+---
+
+## 📦 Exports
+
+| Import                              | Description |
+| ----------------------------------- | ----------- |
+| `@sourceregistry/node-jwt`          | Sync API    |
+| `@sourceregistry/node-jwt/promises` | Promise API |
 
 ---
 
-📦 **Exports**
-This package provides two entrypoints:
+## 🙌 Contributing
 
-| Import | Description |
-|--------|-------------|
-| `@sourceregistry/node-jwt` | Sync API (default) |
-| `@sourceregistry/node-jwt/promises` | Promise-based API |
+PRs welcome!
+Please add tests and maintain full coverage.
 
-Both include full TypeScript types and JSDoc.
+🔐 Security issues? Report responsibly: **[a.p.a.slaa@projectsource.nl](mailto:a.p.a.slaa@projectsource.nl)**
 
----
-
-🙌 **Contributing**
-PRs welcome! Please:
-- Add tests for new features
-- Maintain 100% coverage
-- Follow existing code style
-
-Found a security issue? [Report it responsibly](mailto:a.p.a.slaa@projectsource.nl).
-
-🔗 **GitHub**: [github.com/SourceRegistry/node-jwt](https://github.com/SourceRegistry/node-jwt)  
-📦 **npm**: [@sourceregistry/node-jwt](https://www.npmjs.com/package/@sourceregistry/node-jwt)
+🔗 GitHub: [https://github.com/SourceRegistry/node-jwt](https://github.com/SourceRegistry/node-jwt)
+📦 npm: [https://www.npmjs.com/package/@sourceregistry/node-jwt](https://www.npmjs.com/package/@sourceregistry/node-jwt)
