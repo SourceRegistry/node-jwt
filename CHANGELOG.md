@@ -1,3 +1,10 @@
+## [1.4.1](https://github.com/SourceRegistry/node-jwt/compare/v1.4.0...v1.4.1) (2026-01-04)
+
+
+### Bug Fixes
+
+* Added JOSE signing and verify documentation to docs and README ([acf7c45](https://github.com/SourceRegistry/node-jwt/commit/acf7c45c7d4d4661be8be5639166cfa636a67daf))
+
 # [1.4.0](https://github.com/SourceRegistry/node-jwt/compare/v1.3.1...v1.4.0) (2026-01-04)
 
 
