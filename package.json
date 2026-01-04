@@ -38,7 +38,10 @@
     "authentication",
     "security",
     "typescript",
-    "zero-dependency"
+    "zero-dependency",
+    "vapid",
+    "jose",
+    "der"
   ],
   "author": "A.P.A. Slaa (a.p.a.slaa@projectsource.nl)",
   "license": "Apache-2.0",

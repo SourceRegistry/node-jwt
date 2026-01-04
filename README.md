@@ -166,6 +166,42 @@ const keyObject = JWKS.toKeyObject(jwks, jwk.kid);
 
 ---
 
+## 🔏 ECDSA Signature Format: DER vs JOSE (New)
+
+For **ECDSA** algorithms (`ES256`, `ES384`, `ES512`, `ES256K`) there are two common signature encodings:
+
+- **DER** (ASN.1) — what Node.js produces by default
+- **JOSE** (`r || s` raw signature) — required by the JWT/JWS spec and used by systems like **VAPID/Web Push (WNS)**
+
+### Default behavior
+By default, this library outputs **DER** signatures for `ES*` algorithms to match Node.js/OpenSSL defaults.
+
+### Enable JOSE output
+To generate spec-compliant JOSE ECDSA signatures, set:
+
+- `signatureFormat: "jose"` in `sign()`
+
+```ts
+import { sign, verify } from "@sourceregistry/node-jwt";
+
+const token = sign(
+  { sub: "123", iat: Math.floor(Date.now() / 1000) },
+  ecPrivateKey,
+  { alg: "ES256", signatureFormat: "jose" }
+);
+
+// Verify JOSE-signed token
+const result = verify(token, ecPublicKey, { signatureFormat: "jose" });
+````
+
+### Auto-detect verification (optional)
+
+If enabled in your version, `verify()` can also validate JOSE ECDSA signatures without specifying `signatureFormat` (it will try DER first, then JOSE).
+If you want strict behavior, pass `signatureFormat: "der"` or `signatureFormat: "jose"` explicitly.
+
+> 💡 For VAPID/Web Push (e.g. Windows WNS endpoints), you typically need `ES256` with `signatureFormat: "jose"`.
+
+
 ## 📚 API Reference
 
 ### `sign(payload, secret, options?)`
