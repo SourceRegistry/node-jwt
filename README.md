@@ -14,7 +14,7 @@ Most JWT libraries are bloated, have security pitfalls, or lack proper TypeScrip
 * **Secure by default**
 * **TypeScript-first** with full JSDoc
 * **Zero external dependencies**
-* **100% test coverage**
+* **100% test coverage (Trying😉)**
 * **Dual API**: Sync and Promise-based
 * **Automatic algorithm detection based on key type**
 * **Full JWK/JWKS support** (`import/export`, `toPublicJWK`, `x5c/x5t`, RFC 7638 thumbprints, kid-based key selection)

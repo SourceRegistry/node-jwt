@@ -499,14 +499,14 @@ describe('JWT Library', () => {
 
         it('should throw for unsupported RSA-PSS hash algorithm', () => {
             // @ts-ignore
-            const { privateKey } = generateKeyPairSync('rsa-pss', {
+            const {privateKey} = generateKeyPairSync('rsa-pss', {
                 modulusLength: 2048,
                 hashAlgorithm: 'sha1', // explicitly unsupported
                 saltLength: 20
             });
 
             expect(() => {
-                sign({ sub: 'test' }, privateKey);
+                sign({sub: 'test'}, privateKey);
             }).toThrowError('Unsupported RSA-PSS hash algorithm: sha1');
         });
 
@@ -521,7 +521,7 @@ describe('JWT Library', () => {
             });
             it('should also verify with buffer as data', () => {
                 const input = Buffer.from('testing123', 'utf8');
-                expect(verify(input, verifyKey,'')).toBeTypeOf("boolean");
+                expect(verify(input, verifyKey, '')).toBeTypeOf("boolean");
             });
         })
 
@@ -531,37 +531,37 @@ describe('JWT Library', () => {
     describe('Auto-detection of Algorithm', () => {
         it('should auto-detect HS256 for string secret', () => {
             const token = sign(basePayload, hmacSecret); // no alg
-            const { header } = decode(token);
+            const {header} = decode(token);
             expect(header.alg).toBe('HS256');
         });
 
         it('should auto-detect HS256 for Buffer secret', () => {
             const token = sign(basePayload, Buffer.from(hmacSecret)); // no alg
-            const { header } = decode(token);
+            const {header} = decode(token);
             expect(header.alg).toBe('HS256');
         });
 
         it('should auto-detect RS256 for RSA private key', () => {
             const token = sign(basePayload, rsaPrivateKey); // no alg
-            const { header } = decode(token);
+            const {header} = decode(token);
             expect(header.alg).toBe('RS256');
         });
 
         it('should auto-detect ES256 for P-256 EC private key', () => {
             const token = sign(basePayload, ecPrivateKey); // no alg
-            const { header } = decode(token);
+            const {header} = decode(token);
             expect(header.alg).toBe('ES256');
         });
 
         it('should auto-detect ES256K for secp256k1 private key', () => {
             const token = sign(basePayload, k1PrivateKey); // no alg
-            const { header } = decode(token);
+            const {header} = decode(token);
             expect(header.alg).toBe('ES256K');
         });
 
         it('should auto-detect EdDSA for Ed25519 private key', () => {
             const token = sign(basePayload, edPrivateKey); // no alg
-            const { header } = decode(token);
+            const {header} = decode(token);
             expect(header.alg).toBe('EdDSA');
         });
 
@@ -589,32 +589,32 @@ describe('JWT Library', () => {
 
         it('should auto-detect PS256 for RSA-PSS (SHA-256)', () => {
             const token = sign(basePayload, rsaPss256.privateKey); // no alg
-            const { header } = decode(token);
+            const {header} = decode(token);
             expect(header.alg).toBe('PS256');
         });
 
         it('should auto-detect PS384 for RSA-PSS (SHA-384)', () => {
             const token = sign(basePayload, rsaPss384.privateKey); // no alg
-            const { header } = decode(token);
+            const {header} = decode(token);
             expect(header.alg).toBe('PS384');
         });
 
         it('should auto-detect PS512 for RSA-PSS (SHA-512)', () => {
             const token = sign(basePayload, rsaPss512.privateKey); // no alg
-            const { header } = decode(token);
+            const {header} = decode(token);
             expect(header.alg).toBe('PS512');
         });
 
 
         //Unsupported RSA-PSS hash algorithm
         it('should throw for unsupported asymmetric key type', () => {
-            const { privateKey } = generateKeyPairSync('dsa', {
+            const {privateKey} = generateKeyPairSync('dsa', {
                 modulusLength: 2048,
                 divisorLength: 224
             });
 
             expect(() => {
-                sign({ sub: 'test' }, privateKey);
+                sign({sub: 'test'}, privateKey);
             }).toThrowError('Unsupported asymmetric key type: dsa');
         });
 
@@ -627,53 +627,124 @@ describe('JWT Library', () => {
         //EC Autodection (ESxxx)
 
         it('should auto-detect ES384 for P-384 EC private key', () => {
-            const { privateKey } = generateKeyPairSync('ec', {
+            const {privateKey} = generateKeyPairSync('ec', {
                 namedCurve: 'secp384r1'
             });
 
-            const token = sign({ sub: 'test' }, privateKey);
-            const { header } = decode(token);
+            const token = sign({sub: 'test'}, privateKey);
+            const {header} = decode(token);
 
             expect(header.alg).toBe('ES384');
         });
 
         it('should auto-detect ES512 for P-521 EC private key', () => {
-            const { privateKey } = generateKeyPairSync('ec', {
+            const {privateKey} = generateKeyPairSync('ec', {
                 namedCurve: 'secp521r1'
             });
 
-            const token = sign({ sub: 'test' }, privateKey);
-            const { header } = decode(token);
+            const token = sign({sub: 'test'}, privateKey);
+            const {header} = decode(token);
 
             expect(header.alg).toBe('ES512');
         });
 
 
         it('should throw for unsupported EC curve', () => {
-            const { privateKey } = generateKeyPairSync('ec', {
+            const {privateKey} = generateKeyPairSync('ec', {
                 namedCurve: 'secp224r1' // valid OpenSSL curve, unsupported by JWT
             });
 
             expect(() => {
-                sign({ sub: 'test' }, privateKey);
+                sign({sub: 'test'}, privateKey);
             }).toThrowError('Unsupported EC curve: secp224r1');
         });
 
         //Unsupported asymmetric key type
         it('should throw for unsupported asymmetric key type', () => {
-            const { privateKey } = generateKeyPairSync('dsa', {
+            const {privateKey} = generateKeyPairSync('dsa', {
                 modulusLength: 2048,
                 divisorLength: 224
             });
 
             expect(() => {
-                sign({ sub: 'test' }, privateKey);
+                sign({sub: 'test'}, privateKey);
             }).toThrowError('Unsupported asymmetric key type: dsa');
         });
     });
 
+    // --- JOSE signature format tests (ECDSA) ---
+    describe('ECDSA JOSE signature format', () => {
+        it('ES256 default output should be DER-encoded signature (starts with 0x30)', () => {
+            const token = sign(basePayload, ecPrivateKey, { alg: 'ES256' }); // default DER
+            const sigPart = token.split('.')[2];
+            const sigBytes = Buffer.from(sigPart, 'base64url');
 
+            // DER ECDSA signatures are ASN.1 SEQUENCE => 0x30
+            expect(sigBytes[0]).toBe(0x30);
 
+            const result = verify(token, ecPublicKey);
+            expect(result.valid).toBe(true);
+        });
 
+        it('ES256 with signatureFormat=jose should produce 64-byte signature (r||s)', () => {
+            const token = sign(basePayload, ecPrivateKey, { alg: 'ES256', signatureFormat: 'jose' as any });
+            const sigPart = token.split('.')[2];
+            const sigBytes = Buffer.from(sigPart, 'base64url');
 
+            expect(sigBytes.length).toBe(64);
+            // should NOT look like DER SEQUENCE
+            expect(sigBytes[0]).not.toBe(0x30);
+
+            // verify with explicit jose option
+            const result = verify(token, ecPublicKey, { signatureFormat: 'jose' as any });
+            expect(result.valid).toBe(true);
+        });
+
+        it('ES384 with signatureFormat=jose should produce 96-byte signature', () => {
+            // ES384 requires P-384 key; generate one here (your ecPrivateKey is P-256)
+            const { publicKey, privateKey } = generateKeyPairSync('ec', { namedCurve: 'secp384r1' });
+
+            const token = sign(basePayload, privateKey, { alg: 'ES384', signatureFormat: 'jose' as any });
+            const sigPart = token.split('.')[2];
+            const sigBytes = Buffer.from(sigPart, 'base64url');
+
+            expect(sigBytes.length).toBe(96);
+
+            const result = verify(token, publicKey, { signatureFormat: 'jose' as any });
+            expect(result.valid).toBe(true);
+        });
+
+        it('ES512 with signatureFormat=jose should produce 132-byte signature', () => {
+            // ES512 uses P-521 (secp521r1); generate one here
+            const { publicKey, privateKey } = generateKeyPairSync('ec', { namedCurve: 'secp521r1' });
+
+            const token = sign(basePayload, privateKey, { alg: 'ES512', signatureFormat: 'jose' as any });
+            const sigPart = token.split('.')[2];
+            const sigBytes = Buffer.from(sigPart, 'base64url');
+
+            expect(sigBytes.length).toBe(132);
+
+            const result = verify(token, publicKey, { signatureFormat: 'jose' as any });
+            expect(result.valid).toBe(true);
+        });
+
+        it('ES256K with signatureFormat=jose should produce 64-byte signature', () => {
+            const token = sign(basePayload, k1PrivateKey, { alg: 'ES256K', signatureFormat: 'jose' as any });
+            const sigPart = token.split('.')[2];
+            const sigBytes = Buffer.from(sigPart, 'base64url');
+
+            expect(sigBytes.length).toBe(64);
+
+            const result = verify(token, k1PublicKey, { signatureFormat: 'jose' as any });
+            expect(result.valid).toBe(true);
+        });
+
+        it('verify() should accept JOSE ECDSA tokens in auto-detect mode (if implemented)', () => {
+            const token = sign(basePayload, ecPrivateKey, { alg: 'ES256', signatureFormat: 'jose' as any });
+
+            // auto-detect = no signatureFormat option passed
+            const result = verify(token, ecPublicKey);
+            expect(result.valid).toBe(true);
+        });
+    });
 });

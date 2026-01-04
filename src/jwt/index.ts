@@ -14,13 +14,8 @@ import crypto, {
 
 // Base64URL helpers (padding-safe)
 export const base64Url = {
-    encode: (input: string | Buffer): string =>
-        Buffer.from(input).toString('base64url'),
-
-    decode: (input: string): string => {
-        // Node.js Buffer handles unpadded base64url since v16, but we normalize for safety
-        return Buffer.from(input, 'base64url').toString();
-    }
+    encode: (input: string | Buffer): string => Buffer.from(input).toString('base64url'),
+    decode: (input: string): string => Buffer.from(input, 'base64url').toString()
 };
 
 /**
@@ -87,6 +82,91 @@ export interface JWT {
     payload: JWTPayload;
     signature: string;
 }
+
+
+//JOSE-helpers
+function joseLenForAlg(alg: string): number {
+    switch (alg) {
+        case 'ES256':
+        case 'ES256K':
+            return 64;  // 32 + 32
+        case 'ES384':
+            return 96;  // 48 + 48
+        case 'ES512':
+            return 132; // 66 + 66 (P-521)
+        default:
+            throw new Error(`Unsupported ECDSA alg for JOSE conversion: ${alg}`);
+    }
+}
+
+function derToJose(der: Buffer, outLen: number): Buffer {
+    let i = 0;
+    if (der[i++] !== 0x30) throw new Error('Invalid DER ECDSA signature');
+
+    // seq length (short/long form)
+    let seqLen = der[i++];
+    if (seqLen & 0x80) {
+        const n = seqLen & 0x7f;
+        seqLen = 0;
+        for (let k = 0; k < n; k++) seqLen = (seqLen << 8) | der[i++];
+    }
+
+    if (der[i++] !== 0x02) throw new Error('Invalid DER ECDSA signature (r)');
+    const rLen = der[i++];
+    let r = der.subarray(i, i + rLen);
+    i += rLen;
+
+    if (der[i++] !== 0x02) throw new Error('Invalid DER ECDSA signature (s)');
+    const sLen = der[i++];
+    let s = der.subarray(i, i + sLen);
+
+    // strip leading zeros
+    while (r.length > outLen / 2 && r[0] === 0x00) r = r.subarray(1);
+    while (s.length > outLen / 2 && s[0] === 0x00) s = s.subarray(1);
+
+    const rPad = Buffer.concat([Buffer.alloc(outLen / 2 - r.length, 0), r]);
+    const sPad = Buffer.concat([Buffer.alloc(outLen / 2 - s.length, 0), s]);
+    return Buffer.concat([rPad, sPad]);
+}
+
+function joseToDer(jose: Buffer): Buffer {
+    const half = jose.length / 2;
+    let r = jose.subarray(0, half);
+    let s = jose.subarray(half);
+
+    // trim leading zeros
+    while (r.length > 1 && r[0] === 0x00 && (r[1] & 0x80) === 0) r = r.subarray(1);
+    while (s.length > 1 && s[0] === 0x00 && (s[1] & 0x80) === 0) s = s.subarray(1);
+
+    // if high bit set, prepend 0x00
+    if (r[0] & 0x80) r = Buffer.concat([Buffer.from([0x00]), r]);
+    if (s[0] & 0x80) s = Buffer.concat([Buffer.from([0x00]), s]);
+
+    const rPart = Buffer.concat([Buffer.from([0x02, r.length]), r]);
+    const sPart = Buffer.concat([Buffer.from([0x02, s.length]), s]);
+
+    const seqLen = rPart.length + sPart.length;
+
+    let lenBytes: Buffer;
+    if (seqLen < 0x80) {
+        lenBytes = Buffer.from([seqLen]);
+    } else {
+        const tmp: number[] = [];
+        let n = seqLen;
+        while (n > 0) {
+            tmp.unshift(n & 0xff);
+            n >>= 8;
+        }
+        lenBytes = Buffer.from([0x80 | tmp.length, ...tmp]);
+    }
+
+    return Buffer.concat([Buffer.from([0x30]), lenBytes, rPart, sPart]);
+}
+
+function isEcdsaAlg(alg: string): boolean {
+    return alg === 'ES256' || alg === 'ES384' || alg === 'ES512' || alg === 'ES256K';
+}
+
 
 // Signature algorithms
 export const SignatureAlgorithm = {
@@ -441,15 +521,18 @@ export const sign = (
         alg?: SupportedAlgorithm;
         kid?: string;
         typ?: string;
+        /**
+         * default 'der'
+         */
+        signatureFormat?: 'der' | 'jose';
     } = {}
 ): string => {
     const key = toKeyObject(secret);
-    const alg = options.alg ?? AutodetectAlgorithm(key); // ← fixed: use `key`
+    const alg = options.alg ?? AutodetectAlgorithm(key);
+    const signatureFormat = options.signatureFormat ?? 'der';
     const typ = options.typ ?? 'JWT';
 
-    if (!(alg in SignatureAlgorithm)) {
-        throw new Error(`Unsupported algorithm: ${alg}`);
-    }
+    if (!(alg in SignatureAlgorithm)) throw new Error(`Unsupported algorithm: ${alg}`);
 
     const header: JWTHeader = {alg, typ};
     if (options.kid) header.kid = options.kid;
@@ -458,9 +541,19 @@ export const sign = (
     const payloadEncoded = base64Url.encode(JSON.stringify(payload));
 
     const signingInput = `${headerEncoded}.${payloadEncoded}`;
-    const signature = SignatureAlgorithm[alg].sign(signingInput, secret); // ← note: pass original `secret` to sign()
+
+    // existing DER/base64url signature from algorithms
+    let signature = SignatureAlgorithm[alg].sign(signingInput, secret);
+
+    // If ES* and caller requested JOSE, convert the DER signature bytes to JOSE bytes
+    if (signatureFormat === 'jose' && isEcdsaAlg(alg)) {
+        const der = Buffer.from(signature, 'base64url');
+        const jose = derToJose(der, joseLenForAlg(alg));
+        signature = jose.toString('base64url');
+    }
 
     return `${headerEncoded}.${payloadEncoded}.${signature}`;
+
 };
 
 /**
@@ -481,6 +574,7 @@ export const verify = (
         ignoreExpiration?: boolean;
         clockSkew?: number; // in seconds, default 0
         maxTokenAge?: number; // Maximum age in seconds
+        signatureFormat?: 'der' | 'jose';
     } = {}
 ):
     | { valid: true; header: JWTHeader; payload: JWTPayload; signature: string }
@@ -538,16 +632,53 @@ export const verify = (
 
     // Verify signature
     const signingInput = `${base64Url.encode(JSON.stringify(header))}.${base64Url.encode(JSON.stringify(payload))}`;
-    const isValidSignature = SignatureAlgorithm[alg].verify(signingInput, secret, signature);
 
-    if (!isValidSignature) {
-        return {
-            valid: false,
-            error: {
-                reason: "Signature verification failed",
-                code: 'INVALID_SIGNATURE'
+    if (!isEcdsaAlg(alg)) {
+        // non-ES* algorithms unchanged
+        const isValidSignature = SignatureAlgorithm[alg].verify(signingInput, secret, signature);
+        if (!isValidSignature) {
+            return {valid: false, error: {reason: "Signature verification failed", code: 'INVALID_SIGNATURE'}};
+        }
+    } else {
+        // ES* algorithms: verify DER by default, but allow JOSE + auto-detect
+        const format = options.signatureFormat; // undefined means "auto"
+
+        let ok: boolean;
+
+        // 1) If explicitly JOSE -> convert to DER for verification
+        if (format === 'jose') {
+            try {
+                const jose = Buffer.from(signature, 'base64url');
+                const derSigB64Url = joseToDer(jose).toString('base64url');
+                ok = SignatureAlgorithm[alg].verify(signingInput, secret, derSigB64Url);
+            } catch {
+                ok = false;
             }
-        };
+        }
+        // 2) If explicitly DER -> verify as-is
+        else if (format === 'der') {
+            ok = SignatureAlgorithm[alg].verify(signingInput, secret, signature);
+        }
+        // 3) Auto-detect: try DER first, then JOSE
+        else {
+            ok = SignatureAlgorithm[alg].verify(signingInput, secret, signature);
+            if (!ok) {
+                try {
+                    const jose = Buffer.from(signature, 'base64url');
+                    // quick sanity: only attempt conversion if size matches expected
+                    if (jose.length === joseLenForAlg(alg)) {
+                        const derSigB64Url = joseToDer(jose).toString('base64url');
+                        ok = SignatureAlgorithm[alg].verify(signingInput, secret, derSigB64Url);
+                    }
+                } catch {
+                    // ignore
+                }
+            }
+        }
+
+        if (!ok) {
+            return {valid: false, error: {reason: "Signature verification failed", code: 'INVALID_SIGNATURE'}};
+        }
     }
 
     // Time validation
