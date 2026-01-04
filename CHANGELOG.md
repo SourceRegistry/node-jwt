@@ -1,3 +1,10 @@
+# [1.4.0](https://github.com/SourceRegistry/node-jwt/compare/v1.3.1...v1.4.0) (2026-01-04)
+
+
+### Features
+
+* Added JOSE signing and verify ([193f583](https://github.com/SourceRegistry/node-jwt/commit/193f583a3fe9fd6f9c6a08912b910deb7c679c47))
+
 ## [1.3.1](https://github.com/SourceRegistry/node-jwt/compare/v1.3.0...v1.3.1) (2025-12-22)
 
 
