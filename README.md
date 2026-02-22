@@ -138,6 +138,7 @@ Autodetection fails for unsupported keys:
 * Support **x5c/x5t** (X.509 cert chain + SHA-1 thumbprint)
 * Normalize **JWKS** with auto-generated `kid` and `x5t`
 * Resolve keys from **JWKS** by `kid` for verification
+* Load remote **JWKS** with caching via `JWKS.fromWeb()`
 
 ### 🔹 Example: JWKS Key Selection
 
@@ -151,6 +152,45 @@ const jwks = JWKS.normalize({ keys: [jwk] });
 // Retrieve key by kid
 const keyObject = JWKS.toKeyObject(jwks, jwk.kid);
 ```
+
+### 🔹 Example: Remote JWKS (`fromWeb`)
+
+```ts
+import { JWKS } from '@sourceregistry/node-jwt';
+
+const jwks = await JWKS.fromWeb('https://issuer.example', {
+  ttl: 60_000,
+  timeoutMs: 2_000
+});
+
+const jwk = await jwks.key('my-kid');
+const keys = await jwks.list();
+const rsaKeys = await jwks.find({ kty: 'RSA' });
+const firstSigKey = await jwks.findFirst({ use: 'sig' });
+
+// Force refresh
+await jwks.reload();
+
+// Access cached JWKS snapshot
+const current = jwks.export();
+```
+
+`fromWeb()` options:
+
+* `fetch` — custom fetch implementation (for runtimes/framework adapters)
+* `ttl` — cache TTL in ms (`0` disables automatic refresh)
+* `timeoutMs` — network timeout in ms
+* `endpointOverride` — custom endpoint (absolute or relative)
+* `overrideEndpointCheck` — skip automatic `/.well-known/jwks.json` append
+* `cache` — custom cache backend with `{ get(key), set(key, value) }`
+
+### 🔹 Local Examples
+
+See runnable examples in:
+
+* `examples/jwt.example.ts`
+* `examples/jwks.example.ts`
+
 ---
 
 ## 🛡️ Security Features
@@ -233,7 +273,7 @@ Decode a JWT without verification (**unsafe**).
 
 ## 🧪 Testing
 
-* 100% branch coverage
+* High branch coverage
 * All algorithms + autodetection paths
 * All failure modes
 * Sync + Promise APIs

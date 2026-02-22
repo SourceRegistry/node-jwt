@@ -1,4 +1,4 @@
-import {describe, expect, it} from 'vitest';
+import {describe, expect, it, vi} from 'vitest';
 import {decode, JWTPayload, sign, SignatureAlgorithm, SupportedAlgorithm, verify} from '../src';
 import {generateKeyPairSync, KeyLike} from 'crypto';
 
@@ -55,6 +55,10 @@ describe('JWT Library', () => {
 
         it('should throw on unsupported algorithm', () => {
             expect(() => sign(basePayload, hmacSecret, {alg: 'NONE' as any})).toThrow('Unsupported algorithm: NONE');
+        });
+
+        it('should throw on unsupported key input type for HMAC signing', () => {
+            expect(() => sign(basePayload, 123 as any, {alg: 'HS256'})).toThrow('Unsupported key type');
         });
 
         // Full algorithm coverage
@@ -745,6 +749,57 @@ describe('JWT Library', () => {
             // auto-detect = no signatureFormat option passed
             const result = verify(token, ecPublicKey);
             expect(result.valid).toBe(true);
+        });
+
+        it('verify() should accept DER token with explicit der format', () => {
+            const token = sign(basePayload, ecPrivateKey, { alg: 'ES256' });
+            const result = verify(token, ecPublicKey, { signatureFormat: 'der' as any });
+            expect(result.valid).toBe(true);
+        });
+
+        it('verify() should return invalid signature when jose conversion path fails', () => {
+            const originalVerify = SignatureAlgorithm.ES256.verify;
+            SignatureAlgorithm.ES256.verify = (() => {
+                throw new Error('forced verify failure');
+            }) as any;
+
+            try {
+                const token = sign(basePayload, ecPrivateKey, { alg: 'ES256', signatureFormat: 'jose' as any });
+                const result = verify(token, ecPublicKey, { signatureFormat: 'jose' as any });
+                expect(result.valid).toBe(false);
+                if (!result.valid) expect(result.error.code).toBe('INVALID_SIGNATURE');
+            } finally {
+                SignatureAlgorithm.ES256.verify = originalVerify;
+            }
+        });
+
+        it('verify() should ignore unsupported ECDSA alg in jose auto-detect fallback', () => {
+            const fakeAlg = 'ES999';
+            const original = (SignatureAlgorithm as any)[fakeAlg];
+            const verifySpy = vi.fn(() => false);
+            (SignatureAlgorithm as any)[fakeAlg] = {
+                sign: () => '',
+                verify: verifySpy
+            };
+
+            const token = [
+                Buffer.from(JSON.stringify({ alg: fakeAlg, typ: 'JWT' })).toString('base64url'),
+                Buffer.from(JSON.stringify(basePayload)).toString('base64url'),
+                Buffer.from('raw').toString('base64url')
+            ].join('.');
+
+            try {
+                const result = verify(token, ecPublicKey);
+                expect(result.valid).toBe(false);
+                if (!result.valid) expect(result.error.code).toBe('INVALID_SIGNATURE');
+                expect(verifySpy).toHaveBeenCalled();
+            } finally {
+                if (original) {
+                    (SignatureAlgorithm as any)[fakeAlg] = original;
+                } else {
+                    delete (SignatureAlgorithm as any)[fakeAlg];
+                }
+            }
         });
     });
 });
