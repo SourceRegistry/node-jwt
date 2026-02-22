@@ -169,7 +169,7 @@ const rsaKeys = await jwks.find({ kty: 'RSA' });
 const firstSigKey = await jwks.findFirst({ use: 'sig' });
 
 // Force refresh
-await jwks.reload();
+await jwks.refresh();
 
 // Access cached JWKS snapshot
 const current = jwks.export();
