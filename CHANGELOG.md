@@ -1,3 +1,10 @@
+# [1.5.0](https://github.com/SourceRegistry/node-jwt/compare/v1.4.1...v1.5.0) (2026-02-22)
+
+
+### Features
+
+* added JWKS.fromWeb to support dynamically fetching from JWKS endpoints ([3d62040](https://github.com/SourceRegistry/node-jwt/commit/3d6204060df816b7efc1081ff8b6373e5763320a))
+
 ## [1.4.1](https://github.com/SourceRegistry/node-jwt/compare/v1.4.0...v1.4.1) (2026-01-04)
 
 
