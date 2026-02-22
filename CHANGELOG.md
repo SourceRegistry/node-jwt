@@ -1,3 +1,10 @@
+## [1.5.2](https://github.com/SourceRegistry/node-jwt/compare/v1.5.1...v1.5.2) (2026-02-22)
+
+
+### Bug Fixes
+
+* docs to reflect renaming reload to refresh ([6eff80e](https://github.com/SourceRegistry/node-jwt/commit/6eff80e24564e45a3f9c47de12d44958481b70af))
+
 ## [1.5.1](https://github.com/SourceRegistry/node-jwt/compare/v1.5.0...v1.5.1) (2026-02-22)
 
 
