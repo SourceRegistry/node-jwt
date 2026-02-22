@@ -1,3 +1,10 @@
+## [1.5.1](https://github.com/SourceRegistry/node-jwt/compare/v1.5.0...v1.5.1) (2026-02-22)
+
+
+### Bug Fixes
+
+* renamed jwks.reload to refresh ([dd45d29](https://github.com/SourceRegistry/node-jwt/commit/dd45d29303dadfa09e5ea1a5d4b0f19a39e84430))
+
 # [1.5.0](https://github.com/SourceRegistry/node-jwt/compare/v1.4.1...v1.5.0) (2026-02-22)
 
 
