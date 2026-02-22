@@ -198,7 +198,7 @@ describe('JWK and JWKS extensions', () => {
             );
         });
 
-        it('fromWeb ttl=0 does not auto-refresh, but reload forces fetch', async () => {
+        it('fromWeb ttl=0 does not auto-refresh, but refresh forces fetch', async () => {
             const { publicKey: firstKey } = generateKeyPairSync('rsa', { modulusLength: 2048 });
             const firstJwk = JWK.export(firstKey);
             firstJwk.kid = 'first';
@@ -225,7 +225,7 @@ describe('JWK and JWKS extensions', () => {
             await resolver.key('first');
             expect(fetchMock).toHaveBeenCalledTimes(1);
 
-            const reloadedKeys = await resolver.reload();
+            const reloadedKeys = await resolver.refresh();
             expect(fetchMock).toHaveBeenCalledTimes(2);
             expect(reloadedKeys[0].kid).toBe('second');
         });

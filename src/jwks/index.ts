@@ -370,7 +370,7 @@ export const fromWeb = async (
             }
             return Promise.resolve((cachedJWKS as JWKS).keys);
         },
-        async reload(): Promise<JWK[]> {
+        async refresh(): Promise<JWK[]> {
             await fetchJWKS(false);
             return (cachedJWKS as JWKS).keys;
         },
