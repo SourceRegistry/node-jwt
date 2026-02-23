@@ -1,3 +1,10 @@
+## [1.5.3](https://github.com/SourceRegistry/node-jwt/compare/v1.5.2...v1.5.3) (2026-02-23)
+
+
+### Bug Fixes
+
+* enhanced JWK with a toKeyObject() ([2b91b3f](https://github.com/SourceRegistry/node-jwt/commit/2b91b3f8c93e612ca3bcd84d169954e6dd0b07f4))
+
 ## [1.5.2](https://github.com/SourceRegistry/node-jwt/compare/v1.5.1...v1.5.2) (2026-02-22)
 
 
