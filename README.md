@@ -164,12 +164,13 @@ const jwks = await JWKS.fromWeb('https://issuer.example', {
 });
 
 const jwk = await jwks.key('my-kid');
+const keyObject = jwk?.toKeyObject();
 const keys = await jwks.list();
 const rsaKeys = await jwks.find({ kty: 'RSA' });
 const firstSigKey = await jwks.findFirst({ use: 'sig' });
 
 // Force refresh
-await jwks.refresh();
+await jwks.refresh(); // returns resolver for chaining
 
 // Access cached JWKS snapshot
 const current = jwks.export();
@@ -183,6 +184,15 @@ const current = jwks.export();
 * `endpointOverride` — custom endpoint (absolute or relative)
 * `overrideEndpointCheck` — skip automatic `/.well-known/jwks.json` append
 * `cache` — custom cache backend with `{ get(key), set(key, value) }`
+
+`fromWeb()` resolver methods:
+
+* `key(kid)` — returns a normalized key (or `undefined`) extended with `toKeyObject()`
+* `list()` — returns all normalized keys
+* `find(query)` — returns normalized matching keys
+* `findFirst(query)` — returns first normalized match or `undefined`
+* `refresh()` — forces reload and returns the resolver instance
+* `export()` — returns the current cached JWKS snapshot
 
 ### 🔹 Local Examples
 

@@ -13,6 +13,10 @@ export type JWK =
     | OKPJWK
     | OctJWK;
 
+export type JWKWithHelpers = JWK & {
+    toKeyObject(): KeyObject;
+};
+
 interface BaseJWK {
     kty: string;
     kid?: string;
@@ -223,12 +227,28 @@ export function JWKSToKeyObject(
  */
 export function normalizeJWKS(jwks: JWKS): JWKS {
     return {
-        keys: jwks.keys.map(jwk => ({
+        keys: normalizeJWK(...jwks.keys)
+    };
+}
+
+export function normalizeJWK(...keys: JWK[]): JWKWithHelpers[] {
+    return keys.map((jwk) => {
+        const normalized = {
             ...jwk,
             kid: jwk.kid ?? getJWKThumbprint(jwk),
             x5t: jwk.x5t ?? computeX5T(jwk)
-        }))
-    };
+        } as JWKWithHelpers;
+
+        // Keep helper API out of object enumeration/serialization.
+        Object.defineProperty(normalized, 'toKeyObject', {
+            enumerable: false,
+            configurable: false,
+            writable: false,
+            value: () => importJWK(normalized)
+        });
+
+        return normalized;
+    })
 }
 
 export const fromWeb = async (
@@ -364,27 +384,29 @@ export const fromWeb = async (
 
 
     return ({
-        async list(): Promise<JWK[]> {
+        async list(): Promise<JWKWithHelpers[]> {
             if (ttl > 0 && Date.now() >= nextRefreshAt) {
                 await fetchJWKS(true);
             }
-            return Promise.resolve((cachedJWKS as JWKS).keys);
+            return normalizeJWK(...(cachedJWKS as JWKS).keys);
         },
-        async refresh(): Promise<JWK[]> {
+        async refresh() {
             await fetchJWKS(false);
-            return (cachedJWKS as JWKS).keys;
+            return this;
         },
-        async key(kid: string) {
+        async key(kid: string): Promise<JWKWithHelpers | undefined> {
             const keys = await this.list();
-            return keys.find((v) => v.kid === kid);
+            const key = keys.find((v) => v.kid === kid)
+            if (!key) return undefined;
+            return normalizeJWK(key)[0];
         },
-        async find(input: Partial<BaseJWK>): Promise<JWK[]> {
+        async find(input: Partial<BaseJWK>): Promise<JWKWithHelpers[]> {
             const keys = await this.list();
             const entries = Object.entries(input) as Array<[keyof BaseJWK, BaseJWK[keyof BaseJWK]]>;
 
-            if (entries.length === 0) return keys;
+            if (entries.length === 0) return normalizeJWK(...keys);
 
-            return keys.filter((key) =>
+            return normalizeJWK(...keys.filter((key) =>
                 entries.every(([field, expected]) => {
                     const value = key[field];
                     if (Array.isArray(expected)) {
@@ -394,9 +416,9 @@ export const fromWeb = async (
                     }
                     return value === expected;
                 })
-            );
+            ));
         },
-        async findFirst(input: Partial<BaseJWK>): Promise<JWK> {
+        async findFirst(input: Partial<BaseJWK>): Promise<JWKWithHelpers | undefined> {
             return this.find(input).then(([key]) => key);
         },
         export(): JWKS | undefined {

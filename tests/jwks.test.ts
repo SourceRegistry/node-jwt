@@ -225,7 +225,8 @@ describe('JWK and JWKS extensions', () => {
             await resolver.key('first');
             expect(fetchMock).toHaveBeenCalledTimes(1);
 
-            const reloadedKeys = await resolver.refresh();
+            const refreshedResolver = await resolver.refresh();
+            const reloadedKeys = await refreshedResolver.list();
             expect(fetchMock).toHaveBeenCalledTimes(2);
             expect(reloadedKeys[0].kid).toBe('second');
         });
@@ -305,7 +306,7 @@ describe('JWK and JWKS extensions', () => {
             expect(matches[0].kid).toBe('rsa-key');
 
             const first = await resolver.findFirst({ use: 'sig', kty: 'EC' });
-            expect(first.kid).toBe('ec-key');
+            expect(first?.kid).toBe('ec-key');
         });
 
         it('fromWeb key returns by kid, export returns cached jwks, and find supports array fields', async () => {
@@ -325,6 +326,8 @@ describe('JWK and JWKS extensions', () => {
 
             const keyByKid = await resolver.key('ops-key');
             expect(keyByKid?.kid).toBe('ops-key');
+            expect(keyByKid?.toKeyObject().asymmetricKeyType).toBe('rsa');
+            expect(Object.keys(keyByKid ?? {})).not.toContain('toKeyObject');
 
             const foundByOps = await resolver.find({ key_ops: ['verify'] });
             expect(foundByOps).toHaveLength(1);
