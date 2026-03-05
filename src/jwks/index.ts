@@ -17,7 +17,7 @@ export type JWKWithHelpers = JWK & {
     toKeyObject(): KeyObject;
 };
 
-interface BaseJWK {
+export interface BaseJWK {
     kty: string;
     kid?: string;
     alg?: string;

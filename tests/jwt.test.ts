@@ -122,6 +122,17 @@ describe('JWT Library', () => {
             expect(() => decode('a.b.c')).toThrow('malformed header or payload');
         });
 
+        it('should throw on non-base64url characters', () => {
+            expect(() => decode('abc.def.ghi+')).toThrow('non-base64url characters');
+        });
+
+        it('should throw when header or payload are not JSON objects', () => {
+            const header = Buffer.from('"header"').toString('base64url');
+            const payload = Buffer.from('[]').toString('base64url');
+            const token = `${header}.${payload}.sig`;
+            expect(() => decode(token)).toThrow('header and payload must be JSON objects');
+        });
+
         it('should throw on empty part', () => {
             expect(() => decode('.b.c')).toThrow('empty part');
             expect(() => decode('a..c')).toThrow('empty part');
@@ -143,6 +154,20 @@ describe('JWT Library', () => {
             const result = verify(token, 'wrong-secret');
             expect(result.valid).toBe(false);
             if (!result.valid) expect(result.error.code).toBe('INVALID_SIGNATURE');
+        });
+
+        it('should reject invalid verify options', () => {
+            const token = sign(basePayload, hmacSecret);
+            const result = verify(token, hmacSecret, {clockSkew: -1});
+            expect(result.valid).toBe(false);
+            if (!result.valid) expect(result.error.code).toBe('INVALID_OPTIONS');
+        });
+
+        it('should reject invalid claim types', () => {
+            const token = sign({...basePayload, exp: 'tomorrow' as unknown as number}, hmacSecret);
+            const result = verify(token, hmacSecret);
+            expect(result.valid).toBe(false);
+            if (!result.valid) expect(result.error.code).toBe('INVALID_CLAIM');
         });
 
         it('should verify using the original JWT header/payload segments', () => {

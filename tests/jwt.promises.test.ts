@@ -53,6 +53,13 @@ describe('JWT Promises API', () => {
         await expect(jwt.decode('a.b')).rejects.toThrow('exactly 3 parts');
     });
 
+    it('should reject invalid verify options', async () => {
+        const token = await jwt.sign(payload, secret);
+        await expect(jwt.verify(token, secret, { maxTokenAge: -1 })).rejects.toMatchObject({
+            code: 'INVALID_OPTIONS',
+        });
+    });
+
     it('should reject unsupported algorithm', async () => {
         const forged = `${Buffer.from(JSON.stringify({ alg: 'NONE', typ: 'JWT' })).toString('base64url')}.${Buffer.from(JSON.stringify(payload)).toString('base64url')}.sig`;
         await expect(jwt.verify(forged, secret)).rejects.toMatchObject({

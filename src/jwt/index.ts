@@ -83,6 +83,126 @@ export interface JWT {
     signature: string;
 }
 
+const BASE64URL_SEGMENT_REGEX = /^[A-Za-z0-9_-]+$/;
+
+function isPlainObject(input: unknown): input is Record<string, unknown> {
+    return typeof input === 'object' && input !== null && !Array.isArray(input);
+}
+
+function isFiniteNumber(input: unknown): input is number {
+    return typeof input === 'number' && Number.isFinite(input);
+}
+
+function isStringArray(input: unknown): input is string[] {
+    return Array.isArray(input) && input.every((value) => typeof value === 'string');
+}
+
+function validateRegisteredClaims(payload: JWTPayload): { reason: string; code: string } | null {
+    const claimValidators: Array<{ claim: keyof JWTPayload; valid: boolean; expected: string }> = [
+        {claim: 'iss', valid: payload.iss === undefined || typeof payload.iss === 'string', expected: 'string'},
+        {claim: 'sub', valid: payload.sub === undefined || typeof payload.sub === 'string', expected: 'string'},
+        {claim: 'jti', valid: payload.jti === undefined || typeof payload.jti === 'string', expected: 'string'},
+        {claim: 'sid', valid: payload.sid === undefined || typeof payload.sid === 'string', expected: 'string'},
+        {claim: 'iat', valid: payload.iat === undefined || isFiniteNumber(payload.iat), expected: 'number'},
+        {claim: 'exp', valid: payload.exp === undefined || isFiniteNumber(payload.exp), expected: 'number'},
+        {claim: 'nbf', valid: payload.nbf === undefined || isFiniteNumber(payload.nbf), expected: 'number'},
+    ];
+
+    for (const entry of claimValidators) {
+        if (!entry.valid) {
+            return {
+                reason: `Invalid "${entry.claim}" claim: expected ${entry.expected}`,
+                code: 'INVALID_CLAIM'
+            };
+        }
+    }
+
+    if (payload.aud !== undefined) {
+        const isValidAudience = typeof payload.aud === 'string' || isStringArray(payload.aud);
+        if (!isValidAudience) {
+            return {
+                reason: 'Invalid "aud" claim: expected string or string[]',
+                code: 'INVALID_CLAIM'
+            };
+        }
+    }
+
+    return null;
+}
+
+function validateVerifyOptions(options: VerifyOptions): { reason: string; code: string } | null {
+    if (options.signatureFormat !== undefined && options.signatureFormat !== 'der' && options.signatureFormat !== 'jose') {
+        return {
+            reason: 'Invalid signatureFormat option: expected "der" or "jose"',
+            code: 'INVALID_OPTIONS'
+        };
+    }
+
+    if (options.clockSkew !== undefined && (!isFiniteNumber(options.clockSkew) || options.clockSkew < 0)) {
+        return {
+            reason: 'Invalid clockSkew option: expected a non-negative finite number',
+            code: 'INVALID_OPTIONS'
+        };
+    }
+
+    if (options.maxTokenAge !== undefined && (!isFiniteNumber(options.maxTokenAge) || options.maxTokenAge < 0)) {
+        return {
+            reason: 'Invalid maxTokenAge option: expected a non-negative finite number',
+            code: 'INVALID_OPTIONS'
+        };
+    }
+
+    if (options.issuer !== undefined && typeof options.issuer !== 'string') {
+        return {
+            reason: 'Invalid issuer option: expected string',
+            code: 'INVALID_OPTIONS'
+        };
+    }
+
+    if (options.subject !== undefined && typeof options.subject !== 'string') {
+        return {
+            reason: 'Invalid subject option: expected string',
+            code: 'INVALID_OPTIONS'
+        };
+    }
+
+    if (options.jwtId !== undefined && typeof options.jwtId !== 'string') {
+        return {
+            reason: 'Invalid jwtId option: expected string',
+            code: 'INVALID_OPTIONS'
+        };
+    }
+
+    if (options.audience !== undefined) {
+        const isValidAudience = typeof options.audience === 'string' || isStringArray(options.audience);
+        if (!isValidAudience) {
+            return {
+                reason: 'Invalid audience option: expected string or string[]',
+                code: 'INVALID_OPTIONS'
+            };
+        }
+    }
+
+    if (options.algorithms !== undefined) {
+        if (!Array.isArray(options.algorithms)) {
+            return {
+                reason: 'Invalid algorithms option: expected an array',
+                code: 'INVALID_OPTIONS'
+            };
+        }
+
+        const invalidAlgorithm = options.algorithms.find((alg) => !(alg in SignatureAlgorithm));
+        if (invalidAlgorithm) {
+            return {
+                reason: `Invalid algorithms option: unsupported algorithm "${invalidAlgorithm}"`,
+                code: 'INVALID_OPTIONS'
+            };
+        }
+    }
+
+    return null;
+}
+
 
 //JOSE-helpers
 function joseLenForAlg(alg: string): number {
@@ -499,9 +619,31 @@ export const decode = (token: string): JWT => {
         throw new Error('Invalid JWT: empty part detected');
     }
 
+    if (!BASE64URL_SEGMENT_REGEX.test(headerPart) || !BASE64URL_SEGMENT_REGEX.test(payloadPart) || !BASE64URL_SEGMENT_REGEX.test(signature)) {
+        throw new Error('Invalid JWT: non-base64url characters detected');
+    }
+
     try {
-        const header = JSON.parse(base64Url.decode(headerPart)) as JWTHeader;
-        const payload = JSON.parse(base64Url.decode(payloadPart)) as JWTPayload;
+        const decodedHeader = JSON.parse(base64Url.decode(headerPart));
+        const decodedPayload = JSON.parse(base64Url.decode(payloadPart));
+
+        if (!isPlainObject(decodedHeader) || !isPlainObject(decodedPayload)) {
+            throw new Error('header and payload must be JSON objects');
+        }
+
+        const header = decodedHeader as unknown as JWTHeader;
+        const payload = decodedPayload as JWTPayload;
+
+        if (typeof header.alg !== 'string' || header.alg.length === 0) {
+            throw new Error('header.alg must be a non-empty string');
+        }
+        if (header.typ !== undefined && typeof header.typ !== 'string') {
+            throw new Error('header.typ must be a string');
+        }
+        if (header.kid !== undefined && typeof header.kid !== 'string') {
+            throw new Error('header.kid must be a string');
+        }
+
         return {header, payload, signature};
     } catch (err) {
         throw new Error(`Invalid JWT: malformed header or payload (${(err as Error).message})`);
@@ -583,6 +725,14 @@ export const verify = (
 ):
     | { valid: true; header: JWTHeader; payload: JWTPayload; signature: string }
     | { valid: false; error: { reason: string; code: string } } => {
+    const invalidOptions = validateVerifyOptions(options);
+    if (invalidOptions) {
+        return {
+            valid: false,
+            error: invalidOptions
+        };
+    }
+
     let decoded: JWT;
     try {
         decoded = decode(token);
@@ -597,6 +747,13 @@ export const verify = (
     }
 
     const {header, payload, signature} = decoded;
+    const invalidClaims = validateRegisteredClaims(payload);
+    if (invalidClaims) {
+        return {
+            valid: false,
+            error: invalidClaims
+        };
+    }
 
     // Validate algorithm
     const alg = header.alg as SupportedAlgorithm;

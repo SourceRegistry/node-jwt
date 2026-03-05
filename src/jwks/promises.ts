@@ -9,7 +9,8 @@ import {
     getJWKThumbprint as getJWKThumbprintSYNC,
     JWKSToKeyObject as JWKSToKeyObjectSYNC,
     normalizeJWKS as normalizeJWKSSYNC,
-    computeX5T as computeX5TSYNC
+    computeX5T as computeX5TSYNC,
+    fromWeb as fromWebSYNC
 } from './';
 
 /**
@@ -71,6 +72,14 @@ export const normalizeJWKS = (
  */
 export const computeX5T = (jwk: JWKType) => Promise.resolve().then(() => computeX5TSYNC(jwk))
 
+/**
+ * Load and resolve JWKS from a remote endpoint
+ * @param args
+ */
+export const fromWeb = (
+    ...args: Parameters<typeof fromWebSYNC>
+) => Promise.resolve().then(() => fromWebSYNC(...args));
+
 //namespaced exports
 export const JWK = {
     export: exportJWK,
@@ -84,4 +93,5 @@ export const JWK = {
 export const JWKS = {
     toKeyObject: JWKSToKeyObject,
     normalize: normalizeJWKS,
+    fromWeb,
 };

@@ -50,6 +50,24 @@ describe('JWKS promises API', () => {
         expect(normalized.keys[0].kid).toBeDefined();
     });
 
+    it('loads remote JWKS via fromWeb', async () => {
+        const { publicKey } = generateKeyPairSync('rsa', { modulusLength: 2048 });
+        const jwk = await JWK.export(publicKey);
+        jwk.kid = 'remote-key';
+
+        const fetchMock = async () => ({
+            ok: true,
+            status: 200,
+            statusText: 'OK',
+            json: async () => ({ keys: [jwk] })
+        }) as Response;
+
+        const resolver = await JWKS.fromWeb('https://issuer.example', { fetch: fetchMock as typeof fetch });
+        const resolved = await resolver.key('remote-key');
+
+        expect(resolved?.kid).toBe('remote-key');
+    });
+
     describe('JWKS with x5c/x5t', () => {
 
         it('computes x5t from x5c', async () => {

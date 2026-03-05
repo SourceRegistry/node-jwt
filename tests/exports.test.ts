@@ -18,5 +18,6 @@ describe('Package exports', () => {
         expect(typeof asyncApi.decode).toBe('function');
         expect(typeof asyncApi.JWK.export).toBe('function');
         expect(typeof asyncApi.JWKS.normalize).toBe('function');
+        expect(typeof asyncApi.JWKS.fromWeb).toBe('function');
     });
 });

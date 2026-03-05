@@ -214,6 +214,30 @@ See runnable examples in:
 * ✅ Timing-safe signature comparison
 * ✅ No insecure defaults
 
+## ✅ Production Checklist
+
+Use this profile in production verification paths:
+
+```ts
+import { verify } from '@sourceregistry/node-jwt';
+
+const result = verify(token, publicKeyOrSecret, {
+  algorithms: ['RS256'],           // pin expected algorithm(s)
+  issuer: 'https://issuer.example',
+  audience: 'my-service',
+  clockSkew: 30,                   // seconds
+  maxTokenAge: 3600                // seconds
+});
+```
+
+Recommended operational checks:
+
+* Pin `algorithms` in every verify call (do not rely on implicit acceptance).
+* Always validate `issuer` and `audience` for external tokens.
+* Use short token lifetimes and enforce `maxTokenAge`.
+* Rotate keys regularly and configure JWKS cache `ttl` for your threat model.
+* Monitor and alert on verification failures (`INVALID_SIGNATURE`, `INVALID_CLAIM`, `INVALID_OPTIONS`).
+
 ---
 
 ## 🔏 ECDSA Signature Format: DER vs JOSE (New)
