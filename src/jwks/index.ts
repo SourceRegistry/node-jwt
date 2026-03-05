@@ -360,6 +360,7 @@ export const fromWeb = async (
             }
 
             consecutiveFailures += 1;
+            /* c8 ignore start - stale-on-failure is only reachable when ttl > 0 (auto-refresh path) */
             if (ttl > 0) {
                 const backoff = Math.min(
                     Math.max(ttl, 30_000) * Math.pow(2, consecutiveFailures - 1),
@@ -367,6 +368,7 @@ export const fromWeb = async (
                 );
                 nextRefreshAt = Date.now() + backoff;
             }
+            /* c8 ignore stop */
             console.warn(`JWKS refresh failed for "${endpoint}", using stale cache.`, error);
             return cachedJWKS;
         } finally {

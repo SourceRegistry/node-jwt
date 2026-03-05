@@ -214,6 +214,7 @@ function joseLenForAlg(alg: string): number {
             return 96;  // 48 + 48
         case 'ES512':
             return 132; // 66 + 66 (P-521)
+        /* c8 ignore next 2 */
         default:
             throw new Error(`Unsupported ECDSA alg for JOSE conversion: ${alg}`);
     }

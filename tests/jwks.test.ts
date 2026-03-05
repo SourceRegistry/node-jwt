@@ -2,6 +2,7 @@ import {describe, expect, it, vi} from 'vitest';
 
 import {createSecretKey, generateKeyPairSync, KeyObject} from 'crypto';
 import {JWK, JWKS} from "../src";
+import type {ECJWK, OKPJWK, OctJWK} from "../src";
 
 
 describe('JWK and JWKS extensions', () => {
@@ -11,6 +12,13 @@ describe('JWK and JWKS extensions', () => {
             const { privateKey } = generateKeyPairSync('rsa', { modulusLength: 2048 });
 
             const jwk = JWK.toPublic(privateKey);
+            expect(jwk.kty).toBe('RSA');
+            expect((jwk as any).d).toBeUndefined();
+        });
+
+        it('exports public-only JWK from an existing public key', () => {
+            const { publicKey } = generateKeyPairSync('rsa', { modulusLength: 2048 });
+            const jwk = JWK.toPublic(publicKey);
             expect(jwk.kty).toBe('RSA');
             expect((jwk as any).d).toBeUndefined();
         });
@@ -72,6 +80,12 @@ describe('JWK and JWKS extensions', () => {
             expect(() =>
                 JWKS.toKeyObject({ keys: [] }, 'kid')
             ).toThrow('Key not found in JWKS');
+        });
+
+        it('throws on invalid JWKS shape', () => {
+            expect(() =>
+                JWKS.toKeyObject({} as any, 'kid')
+            ).toThrow('Invalid JWKS');
         });
 
         it('normalizes JWKS with missing kid', () => {
@@ -198,6 +212,26 @@ describe('JWK and JWKS extensions', () => {
             );
         });
 
+        it('fromWeb accepts URL instance input', async () => {
+            const { publicKey } = generateKeyPairSync('rsa', { modulusLength: 2048 });
+            const jwk = JWK.export(publicKey);
+            jwk.kid = 'url-input';
+
+            const fetchMock = vi.fn(async () => ({
+                ok: true,
+                status: 200,
+                statusText: 'OK',
+                json: async () => ({ keys: [jwk] })
+            })) as unknown as typeof fetch;
+
+            const resolver = await JWKS.fromWeb(new URL('https://issuer.example'), { fetch: fetchMock });
+            await resolver.key('url-input');
+            expect(fetchMock).toHaveBeenCalledWith(
+                'https://issuer.example/.well-known/jwks.json',
+                expect.objectContaining({ signal: expect.any(AbortSignal) })
+            );
+        });
+
         it('fromWeb ttl=0 does not auto-refresh, but refresh forces fetch', async () => {
             const { publicKey: firstKey } = generateKeyPairSync('rsa', { modulusLength: 2048 });
             const firstJwk = JWK.export(firstKey);
@@ -229,6 +263,28 @@ describe('JWK and JWKS extensions', () => {
             const reloadedKeys = await refreshedResolver.list();
             expect(fetchMock).toHaveBeenCalledTimes(2);
             expect(reloadedKeys[0].kid).toBe('second');
+        });
+
+        it('fromWeb supports timeoutMs=0 without creating timeout handles', async () => {
+            const { publicKey } = generateKeyPairSync('rsa', { modulusLength: 2048 });
+            const jwk = JWK.export(publicKey);
+            jwk.kid = 'no-timeout';
+
+            const fetchMock = vi.fn(async () => ({
+                ok: true,
+                status: 200,
+                statusText: 'OK',
+                json: async () => ({ keys: [jwk] })
+            })) as unknown as typeof fetch;
+
+            const resolver = await JWKS.fromWeb('https://issuer.example', {
+                fetch: fetchMock,
+                timeoutMs: 0
+            });
+
+            const key = await resolver.key('no-timeout');
+            expect(key?.kid).toBe('no-timeout');
+            expect(fetchMock).toHaveBeenCalledTimes(1);
         });
 
         it('fromWeb throws when initial fetch fails', async () => {
@@ -370,6 +426,23 @@ describe('JWK and JWKS extensions', () => {
             expect(cache.get).toHaveBeenCalledTimes(1);
         });
 
+        it('fromWeb key returns undefined for missing kid', async () => {
+            const { publicKey } = generateKeyPairSync('rsa', { modulusLength: 2048 });
+            const jwk = JWK.export(publicKey);
+            jwk.kid = 'present';
+
+            const fetchMock = vi.fn(async () => ({
+                ok: true,
+                status: 200,
+                statusText: 'OK',
+                json: async () => ({ keys: [jwk] })
+            })) as unknown as typeof fetch;
+
+            const resolver = await JWKS.fromWeb('https://issuer.example', { fetch: fetchMock });
+            const missing = await resolver.key('missing');
+            expect(missing).toBeUndefined();
+        });
+
         it('fromWeb refreshes on resolver call when ttl expires', async () => {
             const { publicKey: firstKey } = generateKeyPairSync('rsa', { modulusLength: 2048 });
             const firstJwk = JWK.export(firstKey);
@@ -458,6 +531,69 @@ describe('JWK and JWKS extensions', () => {
                 warnSpy.mockRestore();
             }
         });
+
+        it('fromWeb deduplicates concurrent refresh calls', async () => {
+            const { publicKey } = generateKeyPairSync('rsa', { modulusLength: 2048 });
+            const jwk = JWK.export(publicKey);
+            jwk.kid = 'dedupe';
+
+            let resolveFetch: (() => void) | undefined;
+            const fetchMockInternal = vi.fn((_input: string | URL | Request, _init?: RequestInit) => {
+                if (fetchMockInternal.mock.calls.length === 1) {
+                    return Promise.resolve({
+                        ok: true,
+                        status: 200,
+                        statusText: 'OK',
+                        json: async () => ({ keys: [jwk] })
+                    } as Response);
+                }
+
+                return new Promise<Response>((resolve) => {
+                    resolveFetch = () => resolve({
+                        ok: true,
+                        status: 200,
+                        statusText: 'OK',
+                        json: async () => ({ keys: [jwk] })
+                    } as Response);
+                });
+            });
+            const fetchMock = fetchMockInternal as unknown as typeof fetch;
+
+            const resolver = await JWKS.fromWeb('https://issuer.example', { fetch: fetchMock });
+
+            const p1 = resolver.refresh();
+            const p2 = resolver.refresh();
+            resolveFetch?.();
+            await Promise.all([p1, p2]);
+
+            // 1 initial preload + 1 shared refresh
+            expect(fetchMock).toHaveBeenCalledTimes(2);
+        });
+
+        it('fromWeb with ttl=0 and cached JWKS does not set refresh deadline', async () => {
+            const { publicKey } = generateKeyPairSync('rsa', { modulusLength: 2048 });
+            const jwk = JWK.export(publicKey);
+            jwk.kid = 'cached-ttl-0';
+
+            const cache = {
+                get: vi.fn(async () => ({ keys: [jwk] })),
+                set: vi.fn(async () => undefined)
+            };
+
+            const fetchMock = vi.fn(async () => {
+                throw new Error('should not fetch');
+            }) as unknown as typeof fetch;
+
+            const resolver = await JWKS.fromWeb('https://issuer.example', {
+                fetch: fetchMock,
+                cache,
+                ttl: 0
+            });
+
+            const keys = await resolver.list();
+            expect(keys).toHaveLength(1);
+            expect(fetchMock).not.toHaveBeenCalled();
+        });
     });
 
     describe('JWK extension', () => {
@@ -498,8 +634,7 @@ describe('JWK and JWKS extensions', () => {
 
             const jwk = JWK.export(privateKey);
             expect(jwk.kty).toBe('EC');
-            // @ts-ignore
-            expect(jwk.crv).toBe('P-256');
+            expect((jwk as ECJWK).crv).toBe('P-256');
 
             const key = JWK.import(jwk);
             expect(key.type).toBe('private');
@@ -512,8 +647,7 @@ describe('JWK and JWKS extensions', () => {
 
             const jwk = JWK.export(privateKey);
             expect(jwk.kty).toBe('OKP');
-            // @ts-ignore
-            expect(jwk.crv).toBe('Ed25519');
+            expect((jwk as OKPJWK).crv).toBe('Ed25519');
 
             const key = JWK.import(jwk);
             expect(key.type).toBe('private');
@@ -526,8 +660,7 @@ describe('JWK and JWKS extensions', () => {
 
             const jwk = JWK.export(secret);
             expect(jwk.kty).toBe('oct');
-            // @ts-ignore
-            expect(jwk.k).toBeDefined();
+            expect((jwk as OctJWK).k).toBeDefined();
 
             const key = JWK.import(jwk);
             expect(key.type).toBe('secret');

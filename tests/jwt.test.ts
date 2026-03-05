@@ -1,5 +1,5 @@
 import {describe, expect, it, vi} from 'vitest';
-import {decode, JWTPayload, sign, SignatureAlgorithm, SupportedAlgorithm, verify} from '../src';
+import {AutodetectAlgorithm, decode, JWTPayload, sign, SignatureAlgorithm, SupportedAlgorithm, verify} from '../src';
 import {createHmac, generateKeyPairSync, KeyLike} from 'crypto';
 
 // === Key Setup ===
@@ -133,6 +133,27 @@ describe('JWT Library', () => {
             expect(() => decode(token)).toThrow('header and payload must be JSON objects');
         });
 
+        it('should throw when header.alg is missing', () => {
+            const header = Buffer.from(JSON.stringify({typ: 'JWT'})).toString('base64url');
+            const payload = Buffer.from(JSON.stringify(basePayload)).toString('base64url');
+            const token = `${header}.${payload}.sig`;
+            expect(() => decode(token)).toThrow('header.alg must be a non-empty string');
+        });
+
+        it('should throw when header.typ is not a string', () => {
+            const header = Buffer.from(JSON.stringify({alg: 'HS256', typ: 1})).toString('base64url');
+            const payload = Buffer.from(JSON.stringify(basePayload)).toString('base64url');
+            const token = `${header}.${payload}.sig`;
+            expect(() => decode(token)).toThrow('header.typ must be a string');
+        });
+
+        it('should throw when header.kid is not a string', () => {
+            const header = Buffer.from(JSON.stringify({alg: 'HS256', kid: 1})).toString('base64url');
+            const payload = Buffer.from(JSON.stringify(basePayload)).toString('base64url');
+            const token = `${header}.${payload}.sig`;
+            expect(() => decode(token)).toThrow('header.kid must be a string');
+        });
+
         it('should throw on empty part', () => {
             expect(() => decode('.b.c')).toThrow('empty part');
             expect(() => decode('a..c')).toThrow('empty part');
@@ -163,8 +184,43 @@ describe('JWT Library', () => {
             if (!result.valid) expect(result.error.code).toBe('INVALID_OPTIONS');
         });
 
+        it('should reject invalid signatureFormat option', () => {
+            const token = sign(basePayload, hmacSecret);
+            const result = verify(token, hmacSecret, {signatureFormat: 'raw' as any});
+            expect(result.valid).toBe(false);
+            if (!result.valid) expect(result.error.code).toBe('INVALID_OPTIONS');
+        });
+
+        it('should reject invalid issuer/subject/jwtId/audience option types', () => {
+            const token = sign(basePayload, hmacSecret);
+            expect(verify(token, hmacSecret, {issuer: 1 as any}).valid).toBe(false);
+            expect(verify(token, hmacSecret, {subject: 1 as any}).valid).toBe(false);
+            expect(verify(token, hmacSecret, {jwtId: 1 as any}).valid).toBe(false);
+            expect(verify(token, hmacSecret, {audience: [1 as any]}).valid).toBe(false);
+        });
+
+        it('should reject invalid algorithms option shape', () => {
+            const token = sign(basePayload, hmacSecret);
+            expect(verify(token, hmacSecret, {algorithms: 'HS256' as any}).valid).toBe(false);
+            expect(verify(token, hmacSecret, {algorithms: ['HS256', 'XXX' as any]}).valid).toBe(false);
+        });
+
         it('should reject invalid claim types', () => {
             const token = sign({...basePayload, exp: 'tomorrow' as unknown as number}, hmacSecret);
+            const result = verify(token, hmacSecret);
+            expect(result.valid).toBe(false);
+            if (!result.valid) expect(result.error.code).toBe('INVALID_CLAIM');
+        });
+
+        it('should reject invalid sid claim type', () => {
+            const token = sign({...basePayload, sid: 123 as any}, hmacSecret);
+            const result = verify(token, hmacSecret);
+            expect(result.valid).toBe(false);
+            if (!result.valid) expect(result.error.code).toBe('INVALID_CLAIM');
+        });
+
+        it('should reject invalid audience claim type', () => {
+            const token = sign({...basePayload, aud: [1 as any]} as any, hmacSecret);
             const result = verify(token, hmacSecret);
             expect(result.valid).toBe(false);
             if (!result.valid) expect(result.error.code).toBe('INVALID_CLAIM');
@@ -451,6 +507,11 @@ describe('JWT Library', () => {
             }
         });
 
+        it('should validate subject when it matches', () => {
+            const result = verify(token, hmacSecret, {subject: 'user123'});
+            expect(result.valid).toBe(true);
+        });
+
         it('should reject missing audience when required', () => {
             const payload = {...basePayload, aud: undefined};
             const token = sign(payload, hmacSecret);
@@ -469,6 +530,11 @@ describe('JWT Library', () => {
             if (!result.valid) {
                 expect(result.error.code).toBe('MISSING_JTI');
             }
+        });
+
+        it('should validate jwtId when it matches', () => {
+            const result = verify(token, hmacSecret, {jwtId: 'abc-123-xyz'});
+            expect(result.valid).toBe(true);
         });
 
 
@@ -551,15 +617,14 @@ describe('JWT Library', () => {
         })
 
         it('should throw for unsupported RSA-PSS hash algorithm', () => {
-            // @ts-ignore
             const {privateKey} = generateKeyPairSync('rsa-pss', {
                 modulusLength: 2048,
                 hashAlgorithm: 'sha1', // explicitly unsupported
                 saltLength: 20
-            });
+            } as any);
 
             expect(() => {
-                sign({sub: 'test'}, privateKey);
+                sign({sub: 'test'}, privateKey as KeyLike);
             }).toThrowError('Unsupported RSA-PSS hash algorithm: sha1');
         });
 
@@ -619,41 +684,38 @@ describe('JWT Library', () => {
         });
 
         // RSA-PSS tests
-        // @ts-ignore
         const rsaPss256 = generateKeyPairSync('rsa-pss', {
             modulusLength: 2048,
             hashAlgorithm: 'sha256',
             saltLength: 32
-        });
+        } as any);
 
-        // @ts-ignore
         const rsaPss384 = generateKeyPairSync('rsa-pss', {
             modulusLength: 2048,
             hashAlgorithm: 'sha384',
             saltLength: 48
-        });
+        } as any);
 
-        // @ts-ignore
         const rsaPss512 = generateKeyPairSync('rsa-pss', {
             modulusLength: 2048,
             hashAlgorithm: 'sha512',
             saltLength: 64
-        });
+        } as any);
 
         it('should auto-detect PS256 for RSA-PSS (SHA-256)', () => {
-            const token = sign(basePayload, rsaPss256.privateKey); // no alg
+            const token = sign(basePayload, rsaPss256.privateKey as KeyLike); // no alg
             const {header} = decode(token);
             expect(header.alg).toBe('PS256');
         });
 
         it('should auto-detect PS384 for RSA-PSS (SHA-384)', () => {
-            const token = sign(basePayload, rsaPss384.privateKey); // no alg
+            const token = sign(basePayload, rsaPss384.privateKey as KeyLike); // no alg
             const {header} = decode(token);
             expect(header.alg).toBe('PS384');
         });
 
         it('should auto-detect PS512 for RSA-PSS (SHA-512)', () => {
-            const token = sign(basePayload, rsaPss512.privateKey); // no alg
+            const token = sign(basePayload, rsaPss512.privateKey as KeyLike); // no alg
             const {header} = decode(token);
             expect(header.alg).toBe('PS512');
         });
@@ -807,8 +869,9 @@ describe('JWT Library', () => {
         });
 
         it('verify() should return invalid signature when jose conversion path fails', () => {
-            const originalVerify = SignatureAlgorithm.ES256.verify;
-            SignatureAlgorithm.ES256.verify = (() => {
+            const es256 = SignatureAlgorithm.ES256 as { sign: typeof SignatureAlgorithm.ES256.sign; verify: typeof SignatureAlgorithm.ES256.verify };
+            const originalVerify = es256.verify;
+            es256.verify = (() => {
                 throw new Error('forced verify failure');
             }) as any;
 
@@ -818,8 +881,87 @@ describe('JWT Library', () => {
                 expect(result.valid).toBe(false);
                 if (!result.valid) expect(result.error.code).toBe('INVALID_SIGNATURE');
             } finally {
-                SignatureAlgorithm.ES256.verify = originalVerify;
+                es256.verify = originalVerify;
             }
+        });
+
+        it('sign() should throw when DER signature is malformed for JOSE conversion', () => {
+            const es256 = SignatureAlgorithm.ES256 as { sign: typeof SignatureAlgorithm.ES256.sign; verify: typeof SignatureAlgorithm.ES256.verify };
+            const originalSign = es256.sign;
+            es256.sign = (() => Buffer.from([0x00, 0x01]).toString('base64url')) as any;
+            try {
+                expect(() => sign(basePayload, ecPrivateKey, {alg: 'ES256', signatureFormat: 'jose'}))
+                    .toThrow('Invalid DER ECDSA signature');
+            } finally {
+                es256.sign = originalSign;
+            }
+        });
+
+        it('sign() should throw when DER signature has invalid r marker', () => {
+            const es256 = SignatureAlgorithm.ES256 as { sign: typeof SignatureAlgorithm.ES256.sign; verify: typeof SignatureAlgorithm.ES256.verify };
+            const originalSign = es256.sign;
+            es256.sign = (() => Buffer.from([0x30, 0x06, 0x03, 0x01, 0x01, 0x02, 0x01, 0x01]).toString('base64url')) as any;
+            try {
+                expect(() => sign(basePayload, ecPrivateKey, {alg: 'ES256', signatureFormat: 'jose'}))
+                    .toThrow('Invalid DER ECDSA signature (r)');
+            } finally {
+                es256.sign = originalSign;
+            }
+        });
+
+        it('sign() should throw when DER signature has invalid s marker', () => {
+            const es256 = SignatureAlgorithm.ES256 as { sign: typeof SignatureAlgorithm.ES256.sign; verify: typeof SignatureAlgorithm.ES256.verify };
+            const originalSign = es256.sign;
+            es256.sign = (() => Buffer.from([0x30, 0x06, 0x02, 0x01, 0x01, 0x03, 0x01, 0x01]).toString('base64url')) as any;
+            try {
+                expect(() => sign(basePayload, ecPrivateKey, {alg: 'ES256', signatureFormat: 'jose'}))
+                    .toThrow('Invalid DER ECDSA signature (s)');
+            } finally {
+                es256.sign = originalSign;
+            }
+        });
+
+        it('sign() should trim leading zero from oversized DER s component', () => {
+            const es256 = SignatureAlgorithm.ES256 as { sign: typeof SignatureAlgorithm.ES256.sign; verify: typeof SignatureAlgorithm.ES256.verify };
+            const originalSign = es256.sign;
+            es256.sign = (() => {
+                const r = Buffer.alloc(32, 0x01);
+                const s = Buffer.concat([Buffer.from([0x00]), Buffer.alloc(32, 0x01)]);
+                const der = Buffer.concat([
+                    Buffer.from([0x30, 0x45, 0x02, 0x20]),
+                    r,
+                    Buffer.from([0x02, 0x21]),
+                    s
+                ]);
+                return der.toString('base64url');
+            }) as any;
+            try {
+                const token = sign(basePayload, ecPrivateKey, {alg: 'ES256', signatureFormat: 'jose'});
+                const sig = Buffer.from(token.split('.')[2], 'base64url');
+                expect(sig.length).toBe(64);
+            } finally {
+                es256.sign = originalSign;
+            }
+        });
+
+        it('verify() jose path should handle leading-zero trimming in joseToDer', () => {
+            const header = Buffer.from(JSON.stringify({alg: 'ES256', typ: 'JWT'})).toString('base64url');
+            const payload = Buffer.from(JSON.stringify(basePayload)).toString('base64url');
+            const joseSig = Buffer.concat([Buffer.from([0x00]), Buffer.alloc(31, 0x01), Buffer.from([0x00]), Buffer.alloc(31, 0x01)]).toString('base64url');
+            const token = `${header}.${payload}.${joseSig}`;
+            const result = verify(token, ecPublicKey, {signatureFormat: 'jose'});
+            expect(result.valid).toBe(false);
+            if (!result.valid) expect(result.error.code).toBe('INVALID_SIGNATURE');
+        });
+
+        it('verify() jose path should prepend zero for high-bit s component', () => {
+            const header = Buffer.from(JSON.stringify({alg: 'ES256', typ: 'JWT'})).toString('base64url');
+            const payload = Buffer.from(JSON.stringify(basePayload)).toString('base64url');
+            const joseSig = Buffer.concat([Buffer.alloc(32, 0x01), Buffer.concat([Buffer.from([0x80]), Buffer.alloc(31, 0x01)])]).toString('base64url');
+            const token = `${header}.${payload}.${joseSig}`;
+            const result = verify(token, ecPublicKey, {signatureFormat: 'jose'});
+            expect(result.valid).toBe(false);
+            if (!result.valid) expect(result.error.code).toBe('INVALID_SIGNATURE');
         });
 
         it('verify() should ignore unsupported ECDSA alg in jose auto-detect fallback', () => {
@@ -849,6 +991,23 @@ describe('JWT Library', () => {
                     delete (SignatureAlgorithm as any)[fakeAlg];
                 }
             }
+        });
+    });
+
+    describe('AutodetectAlgorithm()', () => {
+        it('uses default sha256 for rsa-pss when hashAlgorithm details are missing', () => {
+            const alg = AutodetectAlgorithm({
+                type: 'private',
+                asymmetricKeyType: 'rsa-pss',
+                asymmetricKeyDetails: undefined
+            } as any);
+            expect(alg).toBe('PS256');
+        });
+
+        it('maps OpenSSL and JOSE curve aliases', () => {
+            expect(AutodetectAlgorithm({type: 'private', asymmetricKeyType: 'ec', asymmetricKeyDetails: {namedCurve: 'P-256'}} as any)).toBe('ES256');
+            expect(AutodetectAlgorithm({type: 'private', asymmetricKeyType: 'ec', asymmetricKeyDetails: {namedCurve: 'P-384'}} as any)).toBe('ES384');
+            expect(AutodetectAlgorithm({type: 'private', asymmetricKeyType: 'ec', asymmetricKeyDetails: {namedCurve: 'P-521'}} as any)).toBe('ES512');
         });
     });
 });
