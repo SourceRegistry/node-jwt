@@ -1,6 +1,6 @@
 import {describe, expect, it, vi} from 'vitest';
 import {decode, JWTPayload, sign, SignatureAlgorithm, SupportedAlgorithm, verify} from '../src';
-import {generateKeyPairSync, KeyLike} from 'crypto';
+import {createHmac, generateKeyPairSync, KeyLike} from 'crypto';
 
 // === Key Setup ===
 const hmacSecret = 'my-super-secret';
@@ -141,6 +141,30 @@ describe('JWT Library', () => {
         it('should reject invalid signature', () => {
             const token = sign(basePayload, hmacSecret);
             const result = verify(token, 'wrong-secret');
+            expect(result.valid).toBe(false);
+            if (!result.valid) expect(result.error.code).toBe('INVALID_SIGNATURE');
+        });
+
+        it('should verify using the original JWT header/payload segments', () => {
+            const headerJson = '{\n  "typ":"JWT",\n  "alg":"HS256"\n}';
+            const payloadJson = `{\n  "sub":"${basePayload.sub}",\n  "name":"${basePayload.name}",\n  "iat":${basePayload.iat}\n}`;
+
+            const headerPart = Buffer.from(headerJson).toString('base64url');
+            const payloadPart = Buffer.from(payloadJson).toString('base64url');
+            const signingInput = `${headerPart}.${payloadPart}`;
+            const signature = createHmac('sha256', hmacSecret).update(signingInput).digest('base64url');
+            const token = `${signingInput}.${signature}`;
+
+            const result = verify(token, hmacSecret);
+            expect(result.valid).toBe(true);
+        });
+
+        it('should return INVALID_SIGNATURE when HMAC verify gets a non-secret key', () => {
+            const token = sign(basePayload, hmacSecret, {alg: 'HS256'});
+
+            expect(() => verify(token, rsaPublicKey)).not.toThrow();
+            const result = verify(token, rsaPublicKey);
+
             expect(result.valid).toBe(false);
             if (!result.valid) expect(result.error.code).toBe('INVALID_SIGNATURE');
         });

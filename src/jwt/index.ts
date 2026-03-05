@@ -506,7 +506,17 @@ export const decode = (token: string): JWT => {
     } catch (err) {
         throw new Error(`Invalid JWT: malformed header or payload (${(err as Error).message})`);
     }
-};
+}
+
+export type SignOptions = {
+    alg?: SupportedAlgorithm;
+    kid?: string;
+    typ?: string;
+    /**
+     * default 'der'
+     */
+    signatureFormat?: 'der' | 'jose';
+}
 
 /**
  * Sign a JWT
@@ -517,15 +527,7 @@ export const decode = (token: string): JWT => {
 export const sign = (
     payload: JWTPayload,
     secret: KeyLike,
-    options: {
-        alg?: SupportedAlgorithm;
-        kid?: string;
-        typ?: string;
-        /**
-         * default 'der'
-         */
-        signatureFormat?: 'der' | 'jose';
-    } = {}
+    options: SignOptions = {}
 ): string => {
     const key = toKeyObject(secret);
     const alg = options.alg ?? AutodetectAlgorithm(key);
@@ -556,6 +558,18 @@ export const sign = (
 
 };
 
+export type VerifyOptions = {
+    algorithms?: SupportedAlgorithm[]; // Whitelist of allowed algorithms
+    issuer?: string;
+    subject?: string;
+    audience?: string | string[];
+    jwtId?: string;
+    ignoreExpiration?: boolean;
+    clockSkew?: number; // in seconds, default 0
+    maxTokenAge?: number; // Maximum age in seconds
+    signatureFormat?: 'der' | 'jose';
+};
+
 /**
  * Verify and validate a JWT
  * @param token
@@ -565,17 +579,7 @@ export const sign = (
 export const verify = (
     token: string,
     secret: KeyLike,
-    options: {
-        algorithms?: SupportedAlgorithm[]; // Whitelist of allowed algorithms
-        issuer?: string;
-        subject?: string;
-        audience?: string | string[];
-        jwtId?: string;
-        ignoreExpiration?: boolean;
-        clockSkew?: number; // in seconds, default 0
-        maxTokenAge?: number; // Maximum age in seconds
-        signatureFormat?: 'der' | 'jose';
-    } = {}
+    options: VerifyOptions  = {}
 ):
     | { valid: true; header: JWTHeader; payload: JWTPayload; signature: string }
     | { valid: false; error: { reason: string; code: string } } => {
@@ -630,12 +634,18 @@ export const verify = (
         };
     }
 
-    // Verify signature
-    const signingInput = `${base64Url.encode(JSON.stringify(header))}.${base64Url.encode(JSON.stringify(payload))}`;
+    // Verify signature against the exact original JWT signing input.
+    const [headerPart, payloadPart] = token.split('.');
+    const signingInput = `${headerPart}.${payloadPart}`;
 
     if (!isEcdsaAlg(alg)) {
         // non-ES* algorithms unchanged
-        const isValidSignature = SignatureAlgorithm[alg].verify(signingInput, secret, signature);
+        let isValidSignature = false;
+        try {
+            isValidSignature = SignatureAlgorithm[alg].verify(signingInput, secret, signature);
+        } catch {
+            isValidSignature = false;
+        }
         if (!isValidSignature) {
             return {valid: false, error: {reason: "Signature verification failed", code: 'INVALID_SIGNATURE'}};
         }
@@ -836,5 +846,4 @@ export const JWT = {
     verify,
     decode,
     algorithms: SignatureAlgorithm
-};
-
+} as const;
