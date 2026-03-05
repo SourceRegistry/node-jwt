@@ -1,3 +1,12 @@
+## [1.5.4](https://github.com/SourceRegistry/node-jwt/compare/v1.5.3...v1.5.4) (2026-03-05)
+
+
+### Bug Fixes
+
+* **jwt:** harden production verification and raise test suite to 100% coverage ([deaa843](https://github.com/SourceRegistry/node-jwt/commit/deaa8435960fc8845deca393118f35147e73ce82))
+* **jwt:** harden verification and claims validation for production ([1272b1e](https://github.com/SourceRegistry/node-jwt/commit/1272b1e8759def807e2436696e2404a3c80c5b77))
+* **jwt:** verify original signing input and handle HMAC key-type errors ([3afa4ac](https://github.com/SourceRegistry/node-jwt/commit/3afa4ace034c7d5066aebab1fe8f26ab562cd6f0))
+
 ## [1.5.3](https://github.com/SourceRegistry/node-jwt/compare/v1.5.2...v1.5.3) (2026-02-23)
 
 
