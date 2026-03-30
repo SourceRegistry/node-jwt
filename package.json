@@ -64,6 +64,7 @@
     "@semantic-release/git": "^10.0.1",
     "@semantic-release/npm": "^13.1.5",
     "@semantic-release/release-notes-generator": "^14.0.3",
+    "@sourceregistry/semantic-release-jsr": "^1.0.1",
     "@types/node": "^25.3.3",
     "@vitest/coverage-v8": "^4.0.18",
     "@vitest/ui": "^4.0.18",
@@ -81,15 +82,22 @@
       "@semantic-release/commit-analyzer",
       "@semantic-release/release-notes-generator",
       "@semantic-release/changelog",
-      "@semantic-release/npm",
+      [
+        "@semantic-release/npm"
+      ],
+      [
+        "@sourceregistry/semantic-release-jsr"
+      ],
       [
         "@semantic-release/git",
         {
           "assets": [
             "package.json",
+            "package-lock.json",
+            "jsr.json",
             "CHANGELOG.md"
           ],
-          "message": "node-jwt(release): 🚀 v${nextRelease.version}\n\n${nextRelease.notes}"
+          "message": "node-jwt(release): v${nextRelease.version}\n\n${nextRelease.notes}"
         }
       ]
     ]
