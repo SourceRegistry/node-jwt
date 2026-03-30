@@ -1,3 +1,10 @@
+## [1.5.6](https://github.com/SourceRegistry/node-jwt/compare/v1.5.5...v1.5.6) (2026-03-30)
+
+
+### Bug Fixes
+
+* ci workflow ([553a6b9](https://github.com/SourceRegistry/node-jwt/commit/553a6b9d4367e7e32ba81aee31ba37a2de186255))
+
 ## [1.5.5](https://github.com/SourceRegistry/node-jwt/compare/v1.5.4...v1.5.5) (2026-03-30)
 
 
