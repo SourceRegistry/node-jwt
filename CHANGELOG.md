@@ -1,3 +1,13 @@
+## [1.5.5](https://github.com/SourceRegistry/node-jwt/compare/v1.5.4...v1.5.5) (2026-03-30)
+
+
+### Bug Fixes
+
+* add JSR export and automate releases ([a325eed](https://github.com/SourceRegistry/node-jwt/commit/a325eed9087fbffff951c017909dbc4ffe4b71d9))
+* added jsr badge to README ([bfd43a2](https://github.com/SourceRegistry/node-jwt/commit/bfd43a2593d0ba44b1ff8fffb4f6d28866448312))
+* satisfy jsr public api typing checks ([dd3d034](https://github.com/SourceRegistry/node-jwt/commit/dd3d0342b2850235d6eeef624cdc00ec93aa878d))
+* use npm ci in workflows ([cae5967](https://github.com/SourceRegistry/node-jwt/commit/cae5967190977b3f5b010f4d6e4480221a7c952f))
+
 ## [1.5.4](https://github.com/SourceRegistry/node-jwt/compare/v1.5.3...v1.5.4) (2026-03-05)
 
 
