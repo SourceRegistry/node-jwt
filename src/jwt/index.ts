@@ -288,237 +288,121 @@ function isEcdsaAlg(alg: string): boolean {
     return alg === 'ES256' || alg === 'ES384' || alg === 'ES512' || alg === 'ES256K';
 }
 
+type SignatureAlgorithmImplementation = {
+    sign: (data: BinaryLike, secret: KeyLike) => string;
+    verify: (data: BinaryLike, secret: KeyLike, signature: string) => boolean;
+};
 
-// Signature algorithms
-export const SignatureAlgorithm = {
-    // HMAC
-    HS256: {
-        sign: (data: BinaryLike, secret: KeyLike) =>
-            createHmac('sha256', secret).update(data).digest('base64url'),
-        verify: (data: BinaryLike, secret: KeyLike, signature: string) => {
-            const expected = createHmac('sha256', secret).update(data).digest('base64url');
-            return timingSafeCompare(expected, signature);
-        }
-    },
-    HS384: {
-        sign: (data: BinaryLike, secret: KeyLike) =>
-            createHmac('sha384', secret).update(data).digest('base64url'),
-        verify: (data: BinaryLike, secret: KeyLike, signature: string) => {
-            const expected = createHmac('sha384', secret).update(data).digest('base64url');
-            return timingSafeCompare(expected, signature);
-        }
-    },
-    HS512: {
-        sign: (data: BinaryLike, secret: KeyLike) =>
-            createHmac('sha512', secret).update(data).digest('base64url'),
-        verify: (data: BinaryLike, secret: KeyLike, signature: string) => {
-            const expected = createHmac('sha512', secret).update(data).digest('base64url');
-            return timingSafeCompare(expected, signature);
-        }
-    },
+type SignatureAlgorithmsMap = {
+    HS256: SignatureAlgorithmImplementation;
+    HS384: SignatureAlgorithmImplementation;
+    HS512: SignatureAlgorithmImplementation;
+    RS256: SignatureAlgorithmImplementation;
+    RS384: SignatureAlgorithmImplementation;
+    RS512: SignatureAlgorithmImplementation;
+    ES256: SignatureAlgorithmImplementation;
+    ES384: SignatureAlgorithmImplementation;
+    ES512: SignatureAlgorithmImplementation;
+    ES256K: SignatureAlgorithmImplementation;
+    PS256: SignatureAlgorithmImplementation;
+    PS384: SignatureAlgorithmImplementation;
+    PS512: SignatureAlgorithmImplementation;
+    EdDSA: SignatureAlgorithmImplementation;
+};
 
-    // RSA (DER-encoded signatures, base64url)
-    RS256: {
-        sign: (data: BinaryLike, secret: KeyLike) =>
-            createSign('RSA-SHA256').update(data).end().sign(secret).toString('base64url'),
-        verify: (data: BinaryLike, secret: KeyLike, signature: string) => {
-            try {
-                return createVerify('RSA-SHA256')
-                    .update(data)
-                    .end()
-                    .verify(secret, Buffer.from(signature, 'base64url'));
-            } catch {
-                return false;
-            }
-        }
-    },
-    RS384: {
-        sign: (data: BinaryLike, secret: KeyLike) =>
-            createSign('RSA-SHA384').update(data).end().sign(secret).toString('base64url'),
-        verify: (data: BinaryLike, secret: KeyLike, signature: string) => {
-            try {
-                return createVerify('RSA-SHA384')
-                    .update(data)
-                    .end()
-                    .verify(secret, Buffer.from(signature, 'base64url'));
-            } catch {
-                return false;
-            }
-        }
-    },
-    RS512: {
-        sign: (data: BinaryLike, secret: KeyLike) =>
-            createSign('RSA-SHA512').update(data).end().sign(secret).toString('base64url'),
-        verify: (data: BinaryLike, secret: KeyLike, signature: string) => {
-            try {
-                return createVerify('RSA-SHA512')
-                    .update(data)
-                    .end()
-                    .verify(secret, Buffer.from(signature, 'base64url'));
-            } catch {
-                return false;
-            }
-        }
-    },
+const createHmacAlgorithm = (algorithm: string): SignatureAlgorithmImplementation => ({
+    sign: (data: BinaryLike, secret: KeyLike): string =>
+        createHmac(algorithm, secret).update(data).digest('base64url'),
+    verify: (data: BinaryLike, secret: KeyLike, signature: string): boolean => {
+        const expected = createHmac(algorithm, secret).update(data).digest('base64url');
+        return timingSafeCompare(expected, signature);
+    }
+});
 
-    // ECDSA (DER-encoded by default — no dsaEncoding!)
-    ES256: {
-        sign: (data: BinaryLike, secret: KeyLike) =>
-            createSign('SHA256').update(data).end().sign(secret).toString('base64url'),
-        verify: (data: BinaryLike, secret: KeyLike, signature: string) => {
-            try {
-                return createVerify('SHA256')
-                    .update(data)
-                    .end()
-                    .verify(secret, Buffer.from(signature, 'base64url'));
-            } catch {
-                return false;
-            }
-        }
-    },
-    ES384: {
-        sign: (data: BinaryLike, secret: KeyLike) =>
-            createSign('SHA384').update(data).end().sign(secret).toString('base64url'),
-        verify: (data: BinaryLike, secret: KeyLike, signature: string) => {
-            try {
-                return createVerify('SHA384')
-                    .update(data)
-                    .end()
-                    .verify(secret, Buffer.from(signature, 'base64url'));
-            } catch {
-                return false;
-            }
-        }
-    },
-    ES512: {
-        sign: (data: BinaryLike, secret: KeyLike) =>
-            createSign('SHA512').update(data).end().sign(secret).toString('base64url'),
-        verify: (data: BinaryLike, secret: KeyLike, signature: string) => {
-            try {
-                return createVerify('SHA512')
-                    .update(data)
-                    .end()
-                    .verify(secret, Buffer.from(signature, 'base64url'));
-            } catch {
-                return false;
-            }
-        }
-    },
-    ES256K: {
-        sign: (data: BinaryLike, secret: KeyLike) =>
-            createSign('SHA256').update(data).end().sign(secret).toString('base64url'),
-        verify: (data: BinaryLike, secret: KeyLike, signature: string) => {
-            try {
-                return createVerify('SHA256')
-                    .update(data)
-                    .end()
-                    .verify(secret, Buffer.from(signature, 'base64url'));
-            } catch {
-                return false;
-            }
-        }
-    },
-    PS256: {
-        sign: (data: BinaryLike, secret: KeyLike) =>
-            createSign('RSA-SHA256')
+const createVerifyAlgorithm = (algorithm: string): SignatureAlgorithmImplementation => ({
+    sign: (data: BinaryLike, secret: KeyLike): string =>
+        createSign(algorithm).update(data).end().sign(secret).toString('base64url'),
+    verify: (data: BinaryLike, secret: KeyLike, signature: string): boolean => {
+        try {
+            return createVerify(algorithm)
                 .update(data)
                 .end()
-                .sign({
-                    //@ts-ignore
-                    key: secret,
-                    padding: crypto.constants.RSA_PKCS1_PSS_PADDING,
-                    saltLength: 32
-                })
-                .toString('base64url'),
-        verify: (data: BinaryLike, secret: KeyLike, signature: string) => {
-            try {
-                return createVerify('RSA-SHA256')
-                    .update(data)
-                    .end()
-                    .verify({
-                        //@ts-ignore
-                        key: secret,
-                        padding: crypto.constants.RSA_PKCS1_PSS_PADDING,
-                        saltLength: 32
-                    }, Buffer.from(signature, 'base64url'));
-            } catch {
-                return false;
-            }
-        }
-    },
-    PS384: {
-        sign: (data: BinaryLike, secret: KeyLike) =>
-            createSign('RSA-SHA384')
-                .update(data)
-                .end()
-                .sign({
-                    //@ts-ignore
-                    key: secret,
-                    padding: crypto.constants.RSA_PKCS1_PSS_PADDING,
-                    saltLength: 48
-                })
-                .toString('base64url'),
-        verify: (data: BinaryLike, secret: KeyLike, signature: string) => {
-            try {
-                return createVerify('RSA-SHA384')
-                    .update(data)
-                    .end()
-                    .verify({
-                        //@ts-ignore
-                        key: secret,
-                        padding: crypto.constants.RSA_PKCS1_PSS_PADDING,
-                        saltLength: 48
-                    }, Buffer.from(signature, 'base64url'));
-            } catch {
-                return false;
-            }
-        }
-    },
-    PS512: {
-        sign: (data: BinaryLike, secret: KeyLike) =>
-            createSign('RSA-SHA512')
-                .update(data)
-                .end()
-                .sign({
-                    //@ts-ignore
-                    key: secret,
-                    padding: crypto.constants.RSA_PKCS1_PSS_PADDING,
-                    saltLength: 64
-                })
-                .toString('base64url'),
-        verify: (data: BinaryLike, secret: KeyLike, signature: string) => {
-            try {
-                return createVerify('RSA-SHA512')
-                    .update(data)
-                    .end()
-                    .verify({
-                        //@ts-ignore
-                        key: secret,
-                        padding: crypto.constants.RSA_PKCS1_PSS_PADDING,
-                        saltLength: 64
-                    }, Buffer.from(signature, 'base64url'));
-            } catch {
-                return false;
-            }
-        }
-    },
-    EdDSA: {
-        sign: (data: BinaryLike, secret: KeyLike) =>
-            cryptoSign(null, typeof data === 'string' ? Buffer.from(data, 'utf8') : data, secret)
-                .toString('base64url'),
-        verify: (data: BinaryLike, secret: KeyLike, signature: string) => {
-            try {
-                return cryptoVerify(
-                    null,
-                    typeof data === 'string' ? Buffer.from(data, 'utf8') : data,
-                    secret,
-                    Buffer.from(signature, 'base64url')
-                );
-            } catch {
-                return false;
-            }
+                .verify(secret, Buffer.from(signature, 'base64url'));
+        } catch {
+            return false;
         }
     }
+});
+
+const createPssAlgorithm = (algorithm: string, saltLength: number): SignatureAlgorithmImplementation => ({
+    sign: (data: BinaryLike, secret: KeyLike): string =>
+        createSign(algorithm)
+            .update(data)
+            .end()
+            .sign({
+                //@ts-ignore
+                key: secret,
+                padding: crypto.constants.RSA_PKCS1_PSS_PADDING,
+                saltLength
+            })
+            .toString('base64url'),
+    verify: (data: BinaryLike, secret: KeyLike, signature: string): boolean => {
+        try {
+            return createVerify(algorithm)
+                .update(data)
+                .end()
+                .verify({
+                    //@ts-ignore
+                    key: secret,
+                    padding: crypto.constants.RSA_PKCS1_PSS_PADDING,
+                    saltLength
+                }, Buffer.from(signature, 'base64url'));
+        } catch {
+            return false;
+        }
+    }
+});
+
+const edDsaAlgorithm: SignatureAlgorithmImplementation = {
+    sign: (data: BinaryLike, secret: KeyLike): string =>
+        cryptoSign(null, typeof data === 'string' ? Buffer.from(data, 'utf8') : data, secret)
+            .toString('base64url'),
+    verify: (data: BinaryLike, secret: KeyLike, signature: string): boolean => {
+        try {
+            return cryptoVerify(
+                null,
+                typeof data === 'string' ? Buffer.from(data, 'utf8') : data,
+                secret,
+                Buffer.from(signature, 'base64url')
+            );
+        } catch {
+            return false;
+        }
+    }
+};
+
+
+// Signature algorithms
+export const SignatureAlgorithm: SignatureAlgorithmsMap = {
+    // HMAC
+    HS256: createHmacAlgorithm('sha256'),
+    HS384: createHmacAlgorithm('sha384'),
+    HS512: createHmacAlgorithm('sha512'),
+
+    // RSA (DER-encoded signatures, base64url)
+    RS256: createVerifyAlgorithm('RSA-SHA256'),
+    RS384: createVerifyAlgorithm('RSA-SHA384'),
+    RS512: createVerifyAlgorithm('RSA-SHA512'),
+
+    // ECDSA (DER-encoded by default — no dsaEncoding!)
+    ES256: createVerifyAlgorithm('SHA256'),
+    ES384: createVerifyAlgorithm('SHA384'),
+    ES512: createVerifyAlgorithm('SHA512'),
+    ES256K: createVerifyAlgorithm('SHA256'),
+    PS256: createPssAlgorithm('RSA-SHA256', 32),
+    PS384: createPssAlgorithm('RSA-SHA384', 48),
+    PS512: createPssAlgorithm('RSA-SHA512', 64),
+    EdDSA: edDsaAlgorithm
 } as const;
 
 export type SupportedAlgorithm = keyof typeof SignatureAlgorithm;

@@ -2,6 +2,7 @@ import type {KeyObject} from 'crypto';
 
 import {
     type JWK as JWKType,
+    type JWKSResolver,
     type JWKS as JSONWebKeySet,
     exportJWK as exportJWKSYNC,
     importJWK as importJWKSYNC,
@@ -70,7 +71,8 @@ export const normalizeJWKS = (
  * Compute x5t (SHA-1) from first cert in x5c if not set
  * @param jwk
  */
-export const computeX5T = (jwk: JWKType) => Promise.resolve().then(() => computeX5TSYNC(jwk))
+export const computeX5T = (jwk: JWKType): Promise<string | undefined> =>
+    Promise.resolve().then(() => computeX5TSYNC(jwk));
 
 /**
  * Load and resolve JWKS from a remote endpoint
@@ -78,7 +80,8 @@ export const computeX5T = (jwk: JWKType) => Promise.resolve().then(() => compute
  */
 export const fromWeb = (
     ...args: Parameters<typeof fromWebSYNC>
-) => Promise.resolve().then(() => fromWebSYNC(...args));
+): Promise<JWKSResolver> =>
+    Promise.resolve().then(() => fromWebSYNC(...args));
 
 //namespaced exports
 export const JWK = {

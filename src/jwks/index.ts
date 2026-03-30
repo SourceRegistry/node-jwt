@@ -198,6 +198,15 @@ export interface JWKS {
     keys: JWK[];
 }
 
+export interface JWKSResolver {
+    list(): Promise<JWKWithHelpers[]>;
+    refresh(): Promise<JWKSResolver>;
+    key(kid: string): Promise<JWKWithHelpers | undefined>;
+    find(input: Partial<BaseJWK>): Promise<JWKWithHelpers[]>;
+    findFirst(input: Partial<BaseJWK>): Promise<JWKWithHelpers | undefined>;
+    export(): JWKS | undefined;
+}
+
 /**
  * Convert JWKS specific key of first key to KeyObject
  * @param jwks
@@ -264,7 +273,7 @@ export const fromWeb = async (
             set: (key: string, value: JWKS) => void | Promise<void>;
         };
     }> = {}
-) => {
+): Promise<JWKSResolver> => {
     const baseUrl = typeof url === 'string' ? url : url.toString();
     const fetchFn = options.fetch ?? globalThis.fetch;
     const ttl = Math.max(0, options.ttl ?? 5 * 60_000);
@@ -385,25 +394,25 @@ export const fromWeb = async (
     }
 
 
-    return ({
+    const resolver: JWKSResolver = {
         async list(): Promise<JWKWithHelpers[]> {
             if (ttl > 0 && Date.now() >= nextRefreshAt) {
                 await fetchJWKS(true);
             }
             return normalizeJWK(...(cachedJWKS as JWKS).keys);
         },
-        async refresh() {
+        async refresh(): Promise<JWKSResolver> {
             await fetchJWKS(false);
-            return this;
+            return resolver;
         },
         async key(kid: string): Promise<JWKWithHelpers | undefined> {
-            const keys = await this.list();
+            const keys = await resolver.list();
             const key = keys.find((v) => v.kid === kid)
             if (!key) return undefined;
             return normalizeJWK(key)[0];
         },
         async find(input: Partial<BaseJWK>): Promise<JWKWithHelpers[]> {
-            const keys = await this.list();
+            const keys = await resolver.list();
             const entries = Object.entries(input) as Array<[keyof BaseJWK, BaseJWK[keyof BaseJWK]]>;
 
             if (entries.length === 0) return normalizeJWK(...keys);
@@ -421,12 +430,14 @@ export const fromWeb = async (
             ));
         },
         async findFirst(input: Partial<BaseJWK>): Promise<JWKWithHelpers | undefined> {
-            return this.find(input).then(([key]) => key);
+            return resolver.find(input).then(([key]) => key);
         },
         export(): JWKS | undefined {
             return cachedJWKS;
         }
-    });
+    };
+
+    return resolver;
 }
 
 export const JWKS = {
