@@ -1,6 +1,7 @@
 # 🔐 @sourceregistry/node-jwt
 
 [![npm version](https://img.shields.io/npm/v/@sourceregistry/node-jwt?logo=npm)](https://www.npmjs.com/package/@sourceregistry/node-jwt)
+[![JSR](https://jsr.io/badges/@sourceregistry/node-jwt)](https://jsr.io/@sourceregistry/node-jwt)
 [![License](https://img.shields.io/npm/l/@sourceregistry/node-jwt)](https://github.com/SourceRegistry/node-jwt/blob/main/LICENSE)
 [![CI](https://github.com/SourceRegistry/node-jwt/actions/workflows/test.yml/badge.svg)](https://github.com/SourceRegistry/node-jwt/actions)
 [![Codecov](https://img.shields.io/codecov/c/github/SourceRegistry/node-jwt)](https://codecov.io/gh/SourceRegistry/node-jwt)
