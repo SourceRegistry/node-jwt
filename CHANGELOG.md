@@ -1,3 +1,10 @@
+## [1.5.7](https://github.com/SourceRegistry/node-jwt/compare/v1.5.6...v1.5.7) (2026-04-03)
+
+
+### Bug Fixes
+
+* republish package with built dist assets ([e9b1bae](https://github.com/SourceRegistry/node-jwt/commit/e9b1baec0a825eec5be0732e4ccbbcbe571d9432))
+
 ## [1.5.6](https://github.com/SourceRegistry/node-jwt/compare/v1.5.5...v1.5.6) (2026-03-30)
 
 
