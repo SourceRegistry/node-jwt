@@ -82,12 +82,8 @@
       "@semantic-release/commit-analyzer",
       "@semantic-release/release-notes-generator",
       "@semantic-release/changelog",
-      [
-        "@semantic-release/npm"
-      ],
-      [
-        "@sourceregistry/semantic-release-jsr"
-      ],
+      "@semantic-release/npm",
+      "@sourceregistry/semantic-release-jsr",
       [
         "@semantic-release/git",
         {
