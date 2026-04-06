@@ -1,3 +1,10 @@
+## [1.5.8](https://github.com/SourceRegistry/node-jwt/compare/v1.5.7...v1.5.8) (2026-04-06)
+
+
+### Bug Fixes
+
+* harden JWT verification and align published package outputs ([5f75fe7](https://github.com/SourceRegistry/node-jwt/commit/5f75fe7ef3e0b35e15efd1526f4c274b35ed698f))
+
 ## [1.5.7](https://github.com/SourceRegistry/node-jwt/compare/v1.5.6...v1.5.7) (2026-04-03)
 
 
