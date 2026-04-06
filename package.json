@@ -1,6 +1,6 @@
 {
   "name": "@sourceregistry/node-jwt",
-  "version": "1.5.8",
+  "version": "1.5.9",
   "description": "A lightweight, zero-dependency TypeScript library for creating, verifying and decoding JSON Web Tokens (JWT).",
   "main": "./dist/index.cjs",
   "module": "./dist/index.js",

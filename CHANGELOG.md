@@ -1,3 +1,10 @@
+## [1.5.9](https://github.com/SourceRegistry/node-jwt/compare/v1.5.8...v1.5.9) (2026-04-06)
+
+
+### Bug Fixes
+
+* publish ESM-safe declaration entrypoints ([007de85](https://github.com/SourceRegistry/node-jwt/commit/007de852409bb63861826dc72dd5778a7d57654f))
+
 ## [1.5.8](https://github.com/SourceRegistry/node-jwt/compare/v1.5.7...v1.5.8) (2026-04-06)
 
 
