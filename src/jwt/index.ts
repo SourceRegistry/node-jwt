@@ -75,6 +75,8 @@ export interface JWTHeader {
     alg: string; // Allow unknown algs during decode
     typ?: string;
     kid?: string;
+    crit?: string[];
+    [key: string]: unknown;
 }
 
 export interface JWT {
@@ -198,6 +200,24 @@ function validateVerifyOptions(options: VerifyOptions): { reason: string; code: 
                 code: 'INVALID_OPTIONS'
             };
         }
+    }
+
+    return null;
+}
+
+function validateProtectedHeader(header: JWTHeader): { reason: string; code: string } | null {
+    if (header.crit !== undefined) {
+        if (!isStringArray(header.crit) || header.crit.length === 0) {
+            return {
+                reason: 'Invalid "crit" header: expected non-empty string[]',
+                code: 'INVALID_HEADER'
+            };
+        }
+
+        return {
+            reason: `Unsupported critical header parameters: ${header.crit.join(', ')}`,
+            code: 'UNSUPPORTED_CRITICAL_HEADER'
+        };
     }
 
     return null;
@@ -394,7 +414,7 @@ export const SignatureAlgorithm: SignatureAlgorithmsMap = {
     RS384: createVerifyAlgorithm('RSA-SHA384'),
     RS512: createVerifyAlgorithm('RSA-SHA512'),
 
-    // ECDSA (DER-encoded by default — no dsaEncoding!)
+    // ECDSA (Node/OpenSSL emits DER; sign() converts to JOSE by default for JWTs)
     ES256: createVerifyAlgorithm('SHA256'),
     ES384: createVerifyAlgorithm('SHA384'),
     ES512: createVerifyAlgorithm('SHA512'),
@@ -528,6 +548,9 @@ export const decode = (token: string): JWT => {
         if (header.kid !== undefined && typeof header.kid !== 'string') {
             throw new Error('header.kid must be a string');
         }
+        if (header.crit !== undefined && (!isStringArray(header.crit) || header.crit.length === 0)) {
+            throw new Error('header.crit must be a non-empty string[]');
+        }
 
         return {header, payload, signature};
     } catch (err) {
@@ -540,7 +563,7 @@ export type SignOptions = {
     kid?: string;
     typ?: string;
     /**
-     * default 'der'
+     * default 'jose' for ECDSA JWTs, 'der' otherwise
      */
     signatureFormat?: 'der' | 'jose';
 }
@@ -558,7 +581,7 @@ export const sign = (
 ): string => {
     const key = toKeyObject(secret);
     const alg = options.alg ?? AutodetectAlgorithm(key);
-    const signatureFormat = options.signatureFormat ?? 'der';
+    const signatureFormat = options.signatureFormat ?? (isEcdsaAlg(alg) ? 'jose' : 'der');
     const typ = options.typ ?? 'JWT';
 
     if (!(alg in SignatureAlgorithm)) throw new Error(`Unsupported algorithm: ${alg}`);
@@ -571,7 +594,7 @@ export const sign = (
 
     const signingInput = `${headerEncoded}.${payloadEncoded}`;
 
-    // existing DER/base64url signature from algorithms
+    // Node/OpenSSL produces DER signatures for ECDSA; convert to JOSE for JWT output by default.
     let signature = SignatureAlgorithm[alg].sign(signingInput, secret);
 
     // If ES* and caller requested JOSE, convert the DER signature bytes to JOSE bytes
@@ -632,6 +655,14 @@ export const verify = (
     }
 
     const {header, payload, signature} = decoded;
+    const invalidHeader = validateProtectedHeader(header);
+    if (invalidHeader) {
+        return {
+            valid: false,
+            error: invalidHeader
+        };
+    }
+
     const invalidClaims = validateRegisteredClaims(payload);
     if (invalidClaims) {
         return {
@@ -692,7 +723,7 @@ export const verify = (
             return {valid: false, error: {reason: "Signature verification failed", code: 'INVALID_SIGNATURE'}};
         }
     } else {
-        // ES* algorithms: verify DER by default, but allow JOSE + auto-detect
+        // ES* algorithms accept strict DER/JOSE modes or auto-detect for interoperability.
         const format = options.signatureFormat; // undefined means "auto"
 
         let ok: boolean;

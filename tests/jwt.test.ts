@@ -154,6 +154,13 @@ describe('JWT Library', () => {
             expect(() => decode(token)).toThrow('header.kid must be a string');
         });
 
+        it('should throw when header.crit is not a non-empty string array', () => {
+            const header = Buffer.from(JSON.stringify({alg: 'HS256', crit: []})).toString('base64url');
+            const payload = Buffer.from(JSON.stringify(basePayload)).toString('base64url');
+            const token = `${header}.${payload}.sig`;
+            expect(() => decode(token)).toThrow('header.crit must be a non-empty string[]');
+        });
+
         it('should throw on empty part', () => {
             expect(() => decode('.b.c')).toThrow('empty part');
             expect(() => decode('a..c')).toThrow('empty part');
@@ -265,6 +272,23 @@ describe('JWT Library', () => {
             const result = verify(token, hmacSecret);
             expect(result.valid).toBe(false);
             if (!result.valid) expect(result.error.code).toBe('INVALID_TYPE');
+        });
+
+        it('should reject tokens with unsupported critical headers', () => {
+            const header = Buffer.from(JSON.stringify({
+                alg: 'HS256',
+                typ: 'JWT',
+                crit: ['b64'],
+                b64: false
+            })).toString('base64url');
+            const payload = Buffer.from(JSON.stringify(basePayload)).toString('base64url');
+            const signingInput = `${header}.${payload}`;
+            const signature = createHmac('sha256', hmacSecret).update(signingInput).digest('base64url');
+            const token = `${signingInput}.${signature}`;
+
+            const result = verify(token, hmacSecret);
+            expect(result.valid).toBe(false);
+            if (!result.valid) expect(result.error.code).toBe('UNSUPPORTED_CRITICAL_HEADER');
         });
 
         // --- Time Validation ---
@@ -789,13 +813,13 @@ describe('JWT Library', () => {
 
     // --- JOSE signature format tests (ECDSA) ---
     describe('ECDSA JOSE signature format', () => {
-        it('ES256 default output should be DER-encoded signature (starts with 0x30)', () => {
-            const token = sign(basePayload, ecPrivateKey, { alg: 'ES256' }); // default DER
+        it('ES256 default output should be JOSE-encoded signature', () => {
+            const token = sign(basePayload, ecPrivateKey, { alg: 'ES256' });
             const sigPart = token.split('.')[2];
             const sigBytes = Buffer.from(sigPart, 'base64url');
 
-            // DER ECDSA signatures are ASN.1 SEQUENCE => 0x30
-            expect(sigBytes[0]).toBe(0x30);
+            expect(sigBytes.length).toBe(64);
+            expect(sigBytes[0]).not.toBe(0x30);
 
             const result = verify(token, ecPublicKey);
             expect(result.valid).toBe(true);
@@ -863,7 +887,7 @@ describe('JWT Library', () => {
         });
 
         it('verify() should accept DER token with explicit der format', () => {
-            const token = sign(basePayload, ecPrivateKey, { alg: 'ES256' });
+            const token = sign(basePayload, ecPrivateKey, { alg: 'ES256', signatureFormat: 'der' });
             const result = verify(token, ecPublicKey, { signatureFormat: 'der' as any });
             expect(result.valid).toBe(true);
         });

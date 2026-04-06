@@ -213,6 +213,7 @@ See runnable examples in:
 * ✅ Claim validation (`iss`, `sub`, `aud`, `jti`)
 * ✅ Maximum token age enforcement
 * ✅ Timing-safe signature comparison
+* ✅ Rejects unsupported critical JOSE headers (`crit`)
 * ✅ No insecure defaults
 
 ## ✅ Production Checklist
@@ -249,12 +250,14 @@ For **ECDSA** algorithms (`ES256`, `ES384`, `ES512`, `ES256K`) there are two com
 - **JOSE** (`r || s` raw signature) — required by the JWT/JWS spec and used by systems like **VAPID/Web Push (WNS)**
 
 ### Default behavior
-By default, this library outputs **DER** signatures for `ES*` algorithms to match Node.js/OpenSSL defaults.
+By default, this library outputs **JOSE** signatures for `ES*` algorithms so generated JWTs are JWS-compliant.
+Internally, Node.js/OpenSSL produces DER signatures and the library converts them to JOSE.
 
-### Enable JOSE output
-To generate spec-compliant JOSE ECDSA signatures, set:
+### Enable strict JOSE or DER behavior
+`sign()` and `verify()` accept:
 
-- `signatureFormat: "jose"` in `sign()`
+- `signatureFormat: "jose"` for explicit JOSE handling
+- `signatureFormat: "der"` for interoperability with non-standard DER-based tokens
 
 ```ts
 import { sign, verify } from "@sourceregistry/node-jwt";
@@ -262,7 +265,7 @@ import { sign, verify } from "@sourceregistry/node-jwt";
 const token = sign(
   { sub: "123", iat: Math.floor(Date.now() / 1000) },
   ecPrivateKey,
-  { alg: "ES256", signatureFormat: "jose" }
+  { alg: "ES256" } // defaults to JOSE for ES*
 );
 
 // Verify JOSE-signed token
@@ -271,10 +274,14 @@ const result = verify(token, ecPublicKey, { signatureFormat: "jose" });
 
 ### Auto-detect verification (optional)
 
-If enabled in your version, `verify()` can also validate JOSE ECDSA signatures without specifying `signatureFormat` (it will try DER first, then JOSE).
+`verify()` can also validate JOSE ECDSA signatures without specifying `signatureFormat` (it will try DER first, then JOSE).
 If you want strict behavior, pass `signatureFormat: "der"` or `signatureFormat: "jose"` explicitly.
 
 > 💡 For VAPID/Web Push (e.g. Windows WNS endpoints), you typically need `ES256` with `signatureFormat: "jose"`.
+
+### Critical headers
+Verification rejects tokens that declare unsupported critical header parameters via `crit`.
+This prevents the library from silently accepting JWTs that require header processing it does not implement.
 
 
 ## 📚 API Reference
@@ -294,6 +301,7 @@ Includes algorithm whitelist protection and full claim validation.
 * `INVALID_TOKEN`
 * `INVALID_ALGORITHM`
 * `ALGORITHM_NOT_ALLOWED`
+* `UNSUPPORTED_CRITICAL_HEADER`
 * `INVALID_SIGNATURE`
 * `TOKEN_EXPIRED`
 * `TOKEN_NOT_ACTIVE`

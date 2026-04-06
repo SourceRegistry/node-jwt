@@ -11,13 +11,15 @@ export default defineConfig({
                 promises: resolve(__dirname, 'src/promises.ts')
             },
             formats: ['es', 'cjs'],
-            fileName: (format, entryName) => `${entryName}.${format}.js`
+            fileName: (format, entryName) => format === 'cjs'
+                ? `${entryName}.cjs`
+                : `${entryName}.js`
         },
         rollupOptions: {
             external: ['crypto']
         },
         sourcemap: true,
-        target: 'node22'
+        target: 'node16'
     },
     plugins: [
         dts({
