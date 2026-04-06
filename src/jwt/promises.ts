@@ -7,11 +7,11 @@ import {
     type SupportedAlgorithm,
     JWTHeader,
     SignatureAlgorithm
-} from '../';
+} from '../index.js';
 
 export {
     type SupportedAlgorithm, SupportedAlgorithms, SignatureAlgorithm, type JWTHeader, type JWTPayload
-} from '../index';
+} from '../index.js';
 
 /**
  * Decode a JWT string into its parts (without verification)
@@ -38,7 +38,7 @@ export const verify = (...args: Parameters<typeof verifySync>): Promise<{
 }> =>
     Promise.resolve().then(() => {
         const result = verifySync(...args);
-        if (!result.valid) {
+        if ('error' in result) {
             throw result.error;
         }
         const {header, payload, signature} = result;

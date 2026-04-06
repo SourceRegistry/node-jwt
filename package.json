@@ -25,7 +25,7 @@
     "test": "vitest",
     "test:ui": "vitest --ui",
     "test:coverage": "vitest run --coverage",
-    "lint": "tsc --noEmit",
+    "lint": "tsc --noEmit && tsc --noEmit -p tsconfig.nodenext.json",
     "docs:build": "typedoc src/index.ts --out docs --name \"node-jwt\" --theme default --excludePrivate --excludeProtected"
   },
   "repository": {

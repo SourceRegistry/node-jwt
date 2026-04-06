@@ -1,2 +1,2 @@
-export * from "./jwt"
-export * from "./jwks"
+export * from "./jwt/index.js"
+export * from "./jwks/index.js"

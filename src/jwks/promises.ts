@@ -12,7 +12,7 @@ import {
     normalizeJWKS as normalizeJWKSSYNC,
     computeX5T as computeX5TSYNC,
     fromWeb as fromWebSYNC
-} from './';
+} from './index.js';
 
 /**
  * Export a KeyObject to JWK

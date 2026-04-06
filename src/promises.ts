@@ -1,2 +1,2 @@
-export * from "./jwt/promises"
-export * from "./jwks/promises"
+export * from "./jwt/promises.js"
+export * from "./jwks/promises.js"
