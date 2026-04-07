@@ -4,7 +4,6 @@ import {
     sign as signSync,
     verify as verifySync,
     JWTPayload,
-    type SupportedAlgorithm,
     JWTHeader,
     SignatureAlgorithm
 } from '../index.js';
