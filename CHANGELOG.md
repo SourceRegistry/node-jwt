@@ -1,3 +1,10 @@
+## [1.5.10](https://github.com/SourceRegistry/node-jwt/compare/v1.5.9...v1.5.10) (2026-04-07)
+
+
+### Bug Fixes
+
+* remove unused type ([ff9cb08](https://github.com/SourceRegistry/node-jwt/commit/ff9cb08a0cf7494be85cf8557c390ab3930b155a))
+
 ## [1.5.9](https://github.com/SourceRegistry/node-jwt/compare/v1.5.8...v1.5.9) (2026-04-06)
 
 
