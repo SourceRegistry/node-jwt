@@ -1,3 +1,10 @@
+## [1.5.11](https://github.com/SourceRegistry/node-jwt/compare/v1.5.10...v1.5.11) (2026-07-11)
+
+
+### Bug Fixes
+
+* enforce JWT key and algorithm compatibility ([257556a](https://github.com/SourceRegistry/node-jwt/commit/257556acc964dbde41cfd3949c82fffa7fdfb13f))
+
 ## [1.5.10](https://github.com/SourceRegistry/node-jwt/compare/v1.5.9...v1.5.10) (2026-04-07)
 
 
