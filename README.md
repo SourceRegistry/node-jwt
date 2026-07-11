@@ -207,11 +207,12 @@ See runnable examples in:
 ## 🛡️ Security Features
 
 * ✅ Safe algorithm autodetection
-* ✅ Strict algorithm whitelisting (`algorithms` option)
+* ✅ Algorithm/key-type binding prevents HMAC use with asymmetric keys
+* ✅ Strict algorithm whitelisting (`algorithms` must be non-empty when provided)
 * ✅ Full RSASSA-PSS and Ed25519 support
 * ✅ Time claim validation (`exp`, `nbf`, `iat`) with clock skew
 * ✅ Claim validation (`iss`, `sub`, `aud`, `jti`)
-* ✅ Maximum token age enforcement
+* ✅ Maximum token age enforcement (requires `iat`)
 * ✅ Timing-safe signature comparison
 * ✅ Rejects unsupported critical JOSE headers (`crit`)
 * ✅ No insecure defaults
@@ -234,11 +235,11 @@ const result = verify(token, publicKeyOrSecret, {
 
 Recommended operational checks:
 
-* Pin `algorithms` in every verify call (do not rely on implicit acceptance).
+* Pin `algorithms` in every verify call (the list must be non-empty).
 * Always validate `issuer` and `audience` for external tokens.
-* Use short token lifetimes and enforce `maxTokenAge`.
+* Use short token lifetimes and enforce `maxTokenAge`; tokens must include `iat` when it is configured.
 * Rotate keys regularly and configure JWKS cache `ttl` for your threat model.
-* Monitor and alert on verification failures (`INVALID_SIGNATURE`, `INVALID_CLAIM`, `INVALID_OPTIONS`).
+* Monitor and alert on verification failures (`INVALID_SIGNATURE`, `KEY_ALGORITHM_MISMATCH`, `INVALID_CLAIM`, `INVALID_OPTIONS`).
 
 ---
 
@@ -295,6 +296,8 @@ This prevents the library from silently accepting JWTs that require header proce
 ### `verify(token, secret, options?)`
 
 Includes algorithm whitelist protection and full claim validation.
+
+When `maxTokenAge` is configured, the token must include a numeric `iat` claim. `ignoreExpiration`, when used, must be a boolean.
 
 **Error Codes include:**
 

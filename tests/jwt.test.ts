@@ -6,6 +6,8 @@ import {createHmac, generateKeyPairSync, KeyLike} from 'crypto';
 const hmacSecret = 'my-super-secret';
 const {publicKey: rsaPublicKey, privateKey: rsaPrivateKey} = generateKeyPairSync('rsa', {modulusLength: 2048});
 const {publicKey: ecPublicKey, privateKey: ecPrivateKey} = generateKeyPairSync('ec', {namedCurve: 'P-256'});
+const {publicKey: ec384PublicKey, privateKey: ec384PrivateKey} = generateKeyPairSync('ec', {namedCurve: 'P-384'});
+const {publicKey: ec521PublicKey, privateKey: ec521PrivateKey} = generateKeyPairSync('ec', {namedCurve: 'P-521'});
 const {publicKey: k1PublicKey, privateKey: k1PrivateKey} = generateKeyPairSync('ec', {namedCurve: 'secp256k1'});
 const {publicKey: edPublicKey, privateKey: edPrivateKey} = generateKeyPairSync('ed25519');
 
@@ -26,8 +28,8 @@ const algorithmConfig = {
     RS384: {signKey: rsaPrivateKey, verifyKey: rsaPublicKey},
     RS512: {signKey: rsaPrivateKey, verifyKey: rsaPublicKey},
     ES256: {signKey: ecPrivateKey, verifyKey: ecPublicKey},
-    ES384: {signKey: ecPrivateKey, verifyKey: ecPublicKey},
-    ES512: {signKey: ecPrivateKey, verifyKey: ecPublicKey},
+    ES384: {signKey: ec384PrivateKey, verifyKey: ec384PublicKey},
+    ES512: {signKey: ec521PrivateKey, verifyKey: ec521PublicKey},
     ES256K: {signKey: k1PrivateKey, verifyKey: k1PublicKey},
     PS256: {signKey: rsaPrivateKey, verifyKey: rsaPublicKey},
     PS384: {signKey: rsaPrivateKey, verifyKey: rsaPublicKey},
@@ -85,7 +87,13 @@ describe('JWT Library', () => {
                     const {publicKey} = generateKeyPairSync('rsa', {modulusLength: 2048});
                     wrongKey = publicKey;
                 } else if (alg.startsWith('ES')) {
-                    const curve = alg === 'ES256K' ? 'secp256k1' : 'P-256';
+                    const curve = alg === 'ES256K'
+                        ? 'secp256k1'
+                        : alg === 'ES384'
+                            ? 'P-384'
+                            : alg === 'ES512'
+                                ? 'P-521'
+                                : 'P-256';
                     const {publicKey} = generateKeyPairSync('ec', {namedCurve: curve as any});
                     wrongKey = publicKey;
                 } else {
@@ -191,6 +199,13 @@ describe('JWT Library', () => {
             if (!result.valid) expect(result.error.code).toBe('INVALID_OPTIONS');
         });
 
+        it('should reject non-boolean ignoreExpiration values', () => {
+            const token = sign({...basePayload, exp: now - 60}, hmacSecret);
+            const result = verify(token, hmacSecret, {ignoreExpiration: 'true' as any});
+            expect(result.valid).toBe(false);
+            if (!result.valid) expect(result.error.code).toBe('INVALID_OPTIONS');
+        });
+
         it('should reject invalid signatureFormat option', () => {
             const token = sign(basePayload, hmacSecret);
             const result = verify(token, hmacSecret, {signatureFormat: 'raw' as any});
@@ -210,6 +225,19 @@ describe('JWT Library', () => {
             const token = sign(basePayload, hmacSecret);
             expect(verify(token, hmacSecret, {algorithms: 'HS256' as any}).valid).toBe(false);
             expect(verify(token, hmacSecret, {algorithms: ['HS256', 'XXX' as any]}).valid).toBe(false);
+            expect(verify(token, hmacSecret, {algorithms: []}).valid).toBe(false);
+        });
+
+        it('should reject HS256 tokens signed with an RSA public PEM', () => {
+            const publicPem = rsaPublicKey.export({type: 'spki', format: 'pem'}).toString();
+            const header = Buffer.from(JSON.stringify({alg: 'HS256', typ: 'JWT'})).toString('base64url');
+            const payload = Buffer.from(JSON.stringify(basePayload)).toString('base64url');
+            const signingInput = `${header}.${payload}`;
+            const signature = createHmac('sha256', publicPem).update(signingInput).digest('base64url');
+
+            const result = verify(`${signingInput}.${signature}`, publicPem);
+            expect(result.valid).toBe(false);
+            if (!result.valid) expect(result.error.code).toBe('KEY_ALGORITHM_MISMATCH');
         });
 
         it('should reject invalid claim types', () => {
@@ -247,14 +275,14 @@ describe('JWT Library', () => {
             expect(result.valid).toBe(true);
         });
 
-        it('should return INVALID_SIGNATURE when HMAC verify gets a non-secret key', () => {
+        it('should return KEY_ALGORITHM_MISMATCH when HMAC verify gets a non-secret key', () => {
             const token = sign(basePayload, hmacSecret, {alg: 'HS256'});
 
             expect(() => verify(token, rsaPublicKey)).not.toThrow();
             const result = verify(token, rsaPublicKey);
 
             expect(result.valid).toBe(false);
-            if (!result.valid) expect(result.error.code).toBe('INVALID_SIGNATURE');
+            if (!result.valid) expect(result.error.code).toBe('KEY_ALGORITHM_MISMATCH');
         });
 
         it('should reject unsupported algorithm', () => {
@@ -355,10 +383,11 @@ describe('JWT Library', () => {
                 if (!result.valid) expect(result.error.code).toBe('ALGORITHM_NOT_ALLOWED');
             });
 
-            it('should accept when algorithms list is empty (no restriction)', () => {
+            it('should reject an empty algorithms list', () => {
                 const token = sign(basePayload, hmacSecret, {alg: 'HS256'});
                 const result = verify(token, hmacSecret, {algorithms: []});
-                expect(result.valid).toBe(true);
+                expect(result.valid).toBe(false);
+                if (!result.valid) expect(result.error.code).toBe('INVALID_OPTIONS');
             });
 
             it('should accept when algorithms option is not provided', () => {
@@ -388,11 +417,12 @@ describe('JWT Library', () => {
                 }
             });
 
-            it('should skip maxTokenAge validation when iat is missing', () => {
+            it('should require iat when maxTokenAge is configured', () => {
                 const payload = {...basePayload, iat: undefined};
                 const token = sign(payload, hmacSecret);
                 const result = verify(token, hmacSecret, {maxTokenAge: 100});
-                expect(result.valid).toBe(true);
+                expect(result.valid).toBe(false);
+                if (!result.valid) expect(result.error.code).toBe('MISSING_IAT');
             });
 
             it('should skip maxTokenAge validation when maxTokenAge is not provided', () => {

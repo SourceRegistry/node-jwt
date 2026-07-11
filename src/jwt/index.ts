@@ -3,6 +3,7 @@ import crypto, {
     createSign,
     createVerify,
     createPrivateKey,
+    createPublicKey,
     createSecretKey,
     sign as cryptoSign,
     verify as cryptoVerify,
@@ -154,6 +155,13 @@ function validateVerifyOptions(options: VerifyOptions): { reason: string; code: 
         };
     }
 
+    if (options.ignoreExpiration !== undefined && typeof options.ignoreExpiration !== 'boolean') {
+        return {
+            reason: 'Invalid ignoreExpiration option: expected boolean',
+            code: 'INVALID_OPTIONS'
+        };
+    }
+
     if (options.issuer !== undefined && typeof options.issuer !== 'string') {
         return {
             reason: 'Invalid issuer option: expected string',
@@ -186,9 +194,9 @@ function validateVerifyOptions(options: VerifyOptions): { reason: string; code: 
     }
 
     if (options.algorithms !== undefined) {
-        if (!Array.isArray(options.algorithms)) {
+        if (!Array.isArray(options.algorithms) || options.algorithms.length === 0) {
             return {
-                reason: 'Invalid algorithms option: expected an array',
+                reason: 'Invalid algorithms option: expected a non-empty array',
                 code: 'INVALID_OPTIONS'
             };
         }
@@ -486,25 +494,76 @@ export function AutodetectAlgorithm(key: KeyObject): SupportedAlgorithm {
  * Normalize KeyLike input to a KeyObject
  * @param key
  */
-function toKeyObject(key: KeyLike): KeyObject {
+function toKeyObject(key: KeyLike, purpose: 'sign' | 'verify'): KeyObject {
     // Already a KeyObject (private, public, or secret)
     if (typeof key === 'object' && 'type' in key) return key as KeyObject;
 
-    // Try asymmetric private key (PEM / DER / JWK)
+    // A private key can sign and its public component can verify.
     try {
-        return createPrivateKey(key);
+        return purpose === 'sign' ? createPrivateKey(key) : createPublicKey(key);
     } catch {
-        // Fallback: symmetric key (HMAC)
-        const buffer =
-            typeof key === 'string'
-                ? Buffer.from(key, 'utf8')
-                : Buffer.isBuffer(key)
-                    ? key
-                    : (() => {
-                        throw new Error('Unsupported key type');
-                    })();
+        if (purpose === 'sign') {
+            // Do not silently reinterpret a PEM/DER public key as an HMAC secret.
+            try {
+                createPublicKey(key);
+            } catch {
+                // The input is not a public key; it may still be a symmetric secret.
+                if (typeof key === 'string') return createSecretKey(Buffer.from(key, 'utf8'));
+                if (Buffer.isBuffer(key)) return createSecretKey(key);
+                throw new Error('Unsupported key type');
+            }
+            throw new Error('A public key cannot be used to sign JWTs');
+        }
 
-        return createSecretKey(buffer);
+        if (typeof key === 'string') return createSecretKey(Buffer.from(key, 'utf8'));
+        if (Buffer.isBuffer(key)) return createSecretKey(key);
+        throw new Error('Unsupported key type');
+    }
+}
+
+function assertKeySupportsAlgorithm(key: KeyObject, alg: SupportedAlgorithm, purpose: 'sign' | 'verify'): void {
+    if (alg.startsWith('HS')) {
+        if (key.type !== 'secret') throw new Error(`${alg} requires a symmetric secret key`);
+        return;
+    }
+
+    if (purpose === 'sign' && key.type !== 'private') {
+        throw new Error(`${alg} requires a private key for signing`);
+    }
+    if (purpose === 'verify' && key.type !== 'public' && key.type !== 'private') {
+        throw new Error(`${alg} requires a public or private key for verification`);
+    }
+
+    const keyType = key.asymmetricKeyType;
+    if (alg.startsWith('RS') && keyType !== 'rsa') {
+        throw new Error(`${alg} requires an RSA key`);
+    }
+    if (alg.startsWith('PS') && keyType !== 'rsa' && keyType !== 'rsa-pss') {
+        throw new Error(`${alg} requires an RSA or RSA-PSS key`);
+    }
+    if (alg === 'EdDSA' && keyType !== 'ed25519') {
+        throw new Error('EdDSA requires an Ed25519 key');
+    }
+    if (isEcdsaAlg(alg)) {
+        const curve = key.asymmetricKeyDetails?.namedCurve;
+        let expectedCurve: string[] = [];
+        switch (alg) {
+            case 'ES256':
+                expectedCurve = ['P-256', 'prime256v1'];
+                break;
+            case 'ES384':
+                expectedCurve = ['P-384', 'secp384r1'];
+                break;
+            case 'ES512':
+                expectedCurve = ['P-521', 'secp521r1'];
+                break;
+            case 'ES256K':
+                expectedCurve = ['secp256k1'];
+                break;
+        }
+        if (keyType !== 'ec' || !expectedCurve.includes(curve ?? '')) {
+            throw new Error(`${alg} requires its matching EC curve`);
+        }
     }
 }
 
@@ -579,12 +638,13 @@ export const sign = (
     secret: KeyLike,
     options: SignOptions = {}
 ): string => {
-    const key = toKeyObject(secret);
+    const key = toKeyObject(secret, 'sign');
     const alg = options.alg ?? AutodetectAlgorithm(key);
     const signatureFormat = options.signatureFormat ?? (isEcdsaAlg(alg) ? 'jose' : 'der');
     const typ = options.typ ?? 'JWT';
 
     if (!(alg in SignatureAlgorithm)) throw new Error(`Unsupported algorithm: ${alg}`);
+    assertKeySupportsAlgorithm(key, alg, 'sign');
 
     const header: JWTHeader = {alg, typ};
     if (options.kid) header.kid = options.kid;
@@ -595,7 +655,7 @@ export const sign = (
     const signingInput = `${headerEncoded}.${payloadEncoded}`;
 
     // Node/OpenSSL produces DER signatures for ECDSA; convert to JOSE for JWT output by default.
-    let signature = SignatureAlgorithm[alg].sign(signingInput, secret);
+    let signature = SignatureAlgorithm[alg].sign(signingInput, key);
 
     // If ES* and caller requested JOSE, convert the DER signature bytes to JOSE bytes
     if (signatureFormat === 'jose' && isEcdsaAlg(alg)) {
@@ -616,7 +676,7 @@ export type VerifyOptions = {
     jwtId?: string;
     ignoreExpiration?: boolean;
     clockSkew?: number; // in seconds, default 0
-    maxTokenAge?: number; // Maximum age in seconds
+    maxTokenAge?: number; // Maximum age in seconds; requires an iat claim
     signatureFormat?: 'der' | 'jose';
 };
 
@@ -711,11 +771,25 @@ export const verify = (
     const [headerPart, payloadPart] = token.split('.');
     const signingInput = `${headerPart}.${payloadPart}`;
 
+    let key: KeyObject;
+    try {
+        key = toKeyObject(secret, 'verify');
+        assertKeySupportsAlgorithm(key, alg, 'verify');
+    } catch (error) {
+        return {
+            valid: false,
+            error: {
+                reason: (error as Error).message,
+                code: 'KEY_ALGORITHM_MISMATCH'
+            }
+        };
+    }
+
     if (!isEcdsaAlg(alg)) {
         // non-ES* algorithms unchanged
         let isValidSignature = false;
         try {
-            isValidSignature = SignatureAlgorithm[alg].verify(signingInput, secret, signature);
+            isValidSignature = SignatureAlgorithm[alg].verify(signingInput, key, signature);
         } catch {
             isValidSignature = false;
         }
@@ -733,25 +807,25 @@ export const verify = (
             try {
                 const jose = Buffer.from(signature, 'base64url');
                 const derSigB64Url = joseToDer(jose).toString('base64url');
-                ok = SignatureAlgorithm[alg].verify(signingInput, secret, derSigB64Url);
+                ok = SignatureAlgorithm[alg].verify(signingInput, key, derSigB64Url);
             } catch {
                 ok = false;
             }
         }
         // 2) If explicitly DER -> verify as-is
         else if (format === 'der') {
-            ok = SignatureAlgorithm[alg].verify(signingInput, secret, signature);
+            ok = SignatureAlgorithm[alg].verify(signingInput, key, signature);
         }
         // 3) Auto-detect: try DER first, then JOSE
         else {
-            ok = SignatureAlgorithm[alg].verify(signingInput, secret, signature);
+            ok = SignatureAlgorithm[alg].verify(signingInput, key, signature);
             if (!ok) {
                 try {
                     const jose = Buffer.from(signature, 'base64url');
                     // quick sanity: only attempt conversion if size matches expected
                     if (jose.length === joseLenForAlg(alg)) {
                         const derSigB64Url = joseToDer(jose).toString('base64url');
-                        ok = SignatureAlgorithm[alg].verify(signingInput, secret, derSigB64Url);
+                        ok = SignatureAlgorithm[alg].verify(signingInput, key, derSigB64Url);
                     }
                 } catch {
                     // ignore
@@ -801,6 +875,16 @@ export const verify = (
     }
 
     // Maximum token age validation
+    if (options.maxTokenAge !== undefined && payload.iat === undefined) {
+        return {
+            valid: false,
+            error: {
+                reason: 'Token missing required issued-at claim ("iat")',
+                code: 'MISSING_IAT'
+            }
+        };
+    }
+
     if (options.maxTokenAge !== undefined && payload.iat !== undefined) {
         const tokenAge = now - payload.iat;
         if (tokenAge > options.maxTokenAge) {

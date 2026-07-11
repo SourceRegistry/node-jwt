@@ -136,11 +136,12 @@ describe('JWT Promises API', () => {
         });
     });
 
-    it('should skip maxTokenAge if iat missing', async () => {
+    it('should reject maxTokenAge if iat is missing', async () => {
         const noIatPayload = { ...payload, iat: undefined };
         const token = await jwt.sign(noIatPayload, secret);
-        const result = await jwt.verify(token, secret, { maxTokenAge: 10 });
-        expect(result.payload).toEqual(noIatPayload);
+        await expect(jwt.verify(token, secret, { maxTokenAge: 10 })).rejects.toMatchObject({
+            code: 'MISSING_IAT',
+        });
     });
 
     // --- Custom Claims & Edge Cases ---
