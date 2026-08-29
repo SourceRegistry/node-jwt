@@ -1,3 +1,10 @@
+# [1.6.0](https://github.com/SourceRegistry/node-jwt/compare/v1.5.11...v1.6.0) (2026-08-29)
+
+
+### Features
+
+* accept configurable JWT typ header values ([659dc9a](https://github.com/SourceRegistry/node-jwt/commit/659dc9a9d84346059b8c69647fa145846a459309))
+
 ## [1.5.11](https://github.com/SourceRegistry/node-jwt/compare/v1.5.10...v1.5.11) (2026-07-11)
 
 
