@@ -144,6 +144,12 @@ describe('JWT Promises API', () => {
         });
     });
 
+    it('should accept an explicitly allowed token type', async () => {
+        const token = await jwt.sign(payload, secret, { typ: 'logout+jwt' });
+        const result = await jwt.verify(token, secret, { tokenTypes: ['JWT', 'logout+jwt'] });
+        expect(result.header.typ).toBe('logout+jwt');
+    });
+
     // --- Custom Claims & Edge Cases ---
     it('should preserve custom claims', async () => {
         const customPayload = { ...payload, custom: 'value', roles: ['admin'] };

@@ -226,6 +226,7 @@ import { verify } from '@sourceregistry/node-jwt';
 
 const result = verify(token, publicKeyOrSecret, {
   algorithms: ['RS256'],           // pin expected algorithm(s)
+  tokenTypes: ['JWT'],             // allowlist protected-header typ values
   issuer: 'https://issuer.example',
   audience: 'my-service',
   clockSkew: 30,                   // seconds
@@ -236,6 +237,8 @@ const result = verify(token, publicKeyOrSecret, {
 Recommended operational checks:
 
 * Pin `algorithms` in every verify call (the list must be non-empty).
+* Keep `tokenTypes` narrowly scoped when accepting specialized JWT profiles. It defaults to
+  `['JWT']`; a missing `typ` header remains valid as permitted by RFC 7519.
 * Always validate `issuer` and `audience` for external tokens.
 * Use short token lifetimes and enforce `maxTokenAge`; tokens must include `iat` when it is configured.
 * Rotate keys regularly and configure JWKS cache `ttl` for your threat model.
@@ -296,6 +299,22 @@ This prevents the library from silently accepting JWTs that require header proce
 ### `verify(token, secret, options?)`
 
 Includes algorithm whitelist protection and full claim validation.
+
+Use `tokenTypes` to accept an explicitly identified JWT profile without disabling type checks:
+
+```ts
+const result = verify(logoutToken, publicKey, {
+  algorithms: ['RS256'],
+  tokenTypes: ['JWT', 'logout+jwt']
+});
+```
+
+For example, OpenID Connect Back-Channel Logout recommends `typ: "logout+jwt"` for Logout Tokens,
+so a relying party can allow that profile without accepting arbitrary JWT types. See the
+[Back-Channel Logout specification](https://openid.net/specs/openid-connect-backchannel-1_0.html#LogoutToken).
+
+If a `typ` header is present it must be in the allowlist. The option must be a non-empty array of
+non-empty strings. Omitting it preserves the strict `['JWT']` default.
 
 When `maxTokenAge` is configured, the token must include a numeric `iat` claim. `ignoreExpiration`, when used, must be a boolean.
 

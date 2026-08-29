@@ -228,6 +228,14 @@ describe('JWT Library', () => {
             expect(verify(token, hmacSecret, {algorithms: []}).valid).toBe(false);
         });
 
+        it('should reject invalid tokenTypes option shape', () => {
+            const token = sign(basePayload, hmacSecret);
+            expect(verify(token, hmacSecret, {tokenTypes: 'JWT' as any}).valid).toBe(false);
+            expect(verify(token, hmacSecret, {tokenTypes: []}).valid).toBe(false);
+            expect(verify(token, hmacSecret, {tokenTypes: ['']}).valid).toBe(false);
+            expect(verify(token, hmacSecret, {tokenTypes: ['JWT', 1 as any]}).valid).toBe(false);
+        });
+
         it('should reject HS256 tokens signed with an RSA public PEM', () => {
             const publicPem = rsaPublicKey.export({type: 'spki', format: 'pem'}).toString();
             const header = Buffer.from(JSON.stringify({alg: 'HS256', typ: 'JWT'})).toString('base64url');
@@ -298,6 +306,29 @@ describe('JWT Library', () => {
         it('should reject wrong typ', () => {
             const token = sign(basePayload, hmacSecret, {typ: 'at+jwt'});
             const result = verify(token, hmacSecret);
+            expect(result.valid).toBe(false);
+            if (!result.valid) expect(result.error.code).toBe('INVALID_TYPE');
+        });
+
+        it('should accept an explicitly allowed token type', () => {
+            const token = sign(basePayload, hmacSecret, {typ: 'logout+jwt'});
+            const result = verify(token, hmacSecret, {tokenTypes: ['JWT', 'logout+jwt']});
+            expect(result.valid).toBe(true);
+            if (result.valid) expect(result.header.typ).toBe('logout+jwt');
+        });
+
+        it('should accept an omitted token type with an explicit allowlist', () => {
+            const header = Buffer.from(JSON.stringify({alg: 'HS256'})).toString('base64url');
+            const encodedPayload = Buffer.from(JSON.stringify(basePayload)).toString('base64url');
+            const signingInput = `${header}.${encodedPayload}`;
+            const signature = createHmac('sha256', hmacSecret).update(signingInput).digest('base64url');
+            const result = verify(`${signingInput}.${signature}`, hmacSecret, {tokenTypes: ['logout+jwt']});
+            expect(result.valid).toBe(true);
+        });
+
+        it('should still reject a token type outside the explicit allowlist', () => {
+            const token = sign(basePayload, hmacSecret, {typ: 'at+jwt'});
+            const result = verify(token, hmacSecret, {tokenTypes: ['JWT', 'logout+jwt']});
             expect(result.valid).toBe(false);
             if (!result.valid) expect(result.error.code).toBe('INVALID_TYPE');
         });

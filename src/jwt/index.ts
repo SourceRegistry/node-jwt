@@ -8,7 +8,6 @@ import crypto, {
     sign as cryptoSign,
     verify as cryptoVerify,
     timingSafeEqual,
-    type BinaryLike,
     type KeyLike,
     type KeyObject
 } from 'crypto';
@@ -210,6 +209,22 @@ function validateVerifyOptions(options: VerifyOptions): { reason: string; code: 
         }
     }
 
+    if (options.tokenTypes !== undefined) {
+        if (!Array.isArray(options.tokenTypes) || options.tokenTypes.length === 0 || !isStringArray(options.tokenTypes)) {
+            return {
+                reason: 'Invalid tokenTypes option: expected a non-empty string[]',
+                code: 'INVALID_OPTIONS'
+            };
+        }
+
+        if (options.tokenTypes.some((type) => type.length === 0)) {
+            return {
+                reason: 'Invalid tokenTypes option: token types must not be empty',
+                code: 'INVALID_OPTIONS'
+            };
+        }
+    }
+
     return null;
 }
 
@@ -317,8 +332,8 @@ function isEcdsaAlg(alg: string): boolean {
 }
 
 type SignatureAlgorithmImplementation = {
-    sign: (data: BinaryLike, secret: KeyLike) => string;
-    verify: (data: BinaryLike, secret: KeyLike, signature: string) => boolean;
+    sign: (data: string | NodeJS.ArrayBufferView, secret: KeyLike) => string;
+    verify: (data: string | NodeJS.ArrayBufferView, secret: KeyLike, signature: string) => boolean;
 };
 
 type SignatureAlgorithmsMap = {
@@ -339,18 +354,18 @@ type SignatureAlgorithmsMap = {
 };
 
 const createHmacAlgorithm = (algorithm: string): SignatureAlgorithmImplementation => ({
-    sign: (data: BinaryLike, secret: KeyLike): string =>
+    sign: (data: string | NodeJS.ArrayBufferView, secret: KeyLike): string =>
         createHmac(algorithm, secret).update(data).digest('base64url'),
-    verify: (data: BinaryLike, secret: KeyLike, signature: string): boolean => {
+    verify: (data: string | NodeJS.ArrayBufferView, secret: KeyLike, signature: string): boolean => {
         const expected = createHmac(algorithm, secret).update(data).digest('base64url');
         return timingSafeCompare(expected, signature);
     }
 });
 
 const createVerifyAlgorithm = (algorithm: string): SignatureAlgorithmImplementation => ({
-    sign: (data: BinaryLike, secret: KeyLike): string =>
+    sign: (data: string | NodeJS.ArrayBufferView, secret: KeyLike): string =>
         createSign(algorithm).update(data).end().sign(secret).toString('base64url'),
-    verify: (data: BinaryLike, secret: KeyLike, signature: string): boolean => {
+    verify: (data: string | NodeJS.ArrayBufferView, secret: KeyLike, signature: string): boolean => {
         try {
             return createVerify(algorithm)
                 .update(data)
@@ -363,7 +378,7 @@ const createVerifyAlgorithm = (algorithm: string): SignatureAlgorithmImplementat
 });
 
 const createPssAlgorithm = (algorithm: string, saltLength: number): SignatureAlgorithmImplementation => ({
-    sign: (data: BinaryLike, secret: KeyLike): string =>
+    sign: (data: string | NodeJS.ArrayBufferView, secret: KeyLike): string =>
         createSign(algorithm)
             .update(data)
             .end()
@@ -374,7 +389,7 @@ const createPssAlgorithm = (algorithm: string, saltLength: number): SignatureAlg
                 saltLength
             })
             .toString('base64url'),
-    verify: (data: BinaryLike, secret: KeyLike, signature: string): boolean => {
+    verify: (data: string | NodeJS.ArrayBufferView, secret: KeyLike, signature: string): boolean => {
         try {
             return createVerify(algorithm)
                 .update(data)
@@ -392,10 +407,10 @@ const createPssAlgorithm = (algorithm: string, saltLength: number): SignatureAlg
 });
 
 const edDsaAlgorithm: SignatureAlgorithmImplementation = {
-    sign: (data: BinaryLike, secret: KeyLike): string =>
+    sign: (data: string | NodeJS.ArrayBufferView, secret: KeyLike): string =>
         cryptoSign(null, typeof data === 'string' ? Buffer.from(data, 'utf8') : data, secret)
             .toString('base64url'),
-    verify: (data: BinaryLike, secret: KeyLike, signature: string): boolean => {
+    verify: (data: string | NodeJS.ArrayBufferView, secret: KeyLike, signature: string): boolean => {
         try {
             return cryptoVerify(
                 null,
@@ -670,6 +685,8 @@ export const sign = (
 
 export type VerifyOptions = {
     algorithms?: SupportedAlgorithm[]; // Whitelist of allowed algorithms
+    /** Allowed protected-header `typ` values. Defaults to `['JWT']`. A missing `typ` remains valid. */
+    tokenTypes?: string[];
     issuer?: string;
     subject?: string;
     audience?: string | string[];
@@ -756,12 +773,14 @@ export const verify = (
         }
     }
 
-    // Validate 'typ' header (must be 'JWT' if present)
-    if (header.typ !== undefined && header.typ !== 'JWT') {
+    // JWT permits omitting `typ`. When present, it must match the caller's
+    // explicit allowlist or the secure default of only `JWT`.
+    const tokenTypes = options.tokenTypes ?? ['JWT'];
+    if (header.typ !== undefined && !tokenTypes.includes(header.typ)) {
         return {
             valid: false,
             error: {
-                reason: `Invalid token type: expected 'JWT', got '${header.typ}'`,
+                reason: `Invalid token type: expected one of ${tokenTypes.map((type) => `'${type}'`).join(', ')}, got '${header.typ}'`,
                 code: 'INVALID_TYPE'
             }
         };

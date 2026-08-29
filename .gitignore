@@ -140,3 +140,10 @@ vite.config.ts.timestamp-*
 .idea
 .vscode
 docs
+
+# AI
+.nova-ai
+.claude
+.codex
+.mcp.json
+.agents
