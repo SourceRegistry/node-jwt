@@ -134,7 +134,7 @@ Autodetection fails for unsupported keys:
 ## 🧩 JWK / JWKS Support
 
 * Import/export **JWK**: `importJWK()`, `exportJWK()`
-* Convert to **public-only JWK**: `toPublicJWK()`
+* Convert an asymmetric key to a **public-only JWK**: `toPublicJWK()` (rejects symmetric secrets)
 * Compute **RFC 7638 thumbprint**: `getJWKThumbprint()`
 * Support **x5c/x5t** (X.509 cert chain + SHA-1 thumbprint)
 * Normalize **JWKS** with auto-generated `kid` and `x5t`
@@ -181,10 +181,13 @@ const current = jwks.export();
 
 * `fetch` — custom fetch implementation (for runtimes/framework adapters)
 * `ttl` — cache TTL in ms (`0` disables automatic refresh)
-* `timeoutMs` — network timeout in ms
+* `maxStaleMs` — maximum time to serve cached keys after `ttl` expires when automatic refresh fails (default: 5 minutes; `0` fails closed)
+* `timeoutMs` — timeout for fetching and parsing the JWKS response in ms
 * `endpointOverride` — custom endpoint (absolute or relative)
 * `overrideEndpointCheck` — skip automatic `/.well-known/jwks.json` append
-* `cache` — custom cache backend with `{ get(key), set(key, value) }`
+* `cache` — custom cache backend with `{ get(key), set(key, value) }`; persist the `fetchedAt` timestamp included in values passed to `set`. Entries without a valid timestamp are fetched again when `ttl > 0`.
+
+With `ttl: 0`, automatic refresh is disabled; call `refresh()` to update the keys.
 
 `fromWeb()` resolver methods:
 
@@ -193,7 +196,7 @@ const current = jwks.export();
 * `find(query)` — returns normalized matching keys
 * `findFirst(query)` — returns first normalized match or `undefined`
 * `refresh()` — forces reload and returns the resolver instance
-* `export()` — returns the current cached JWKS snapshot
+* `export()` — returns the current cached JWKS snapshot, or `undefined` after its maximum stale age
 
 ### 🔹 Local Examples
 

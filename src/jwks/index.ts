@@ -111,6 +111,9 @@ export function toPublicJWK(key: KeyObject): JWK {
     if (!key || typeof key !== 'object') {
         throw new Error('Invalid KeyObject');
     }
+    if (key.type === 'secret') {
+        throw new Error('A symmetric secret key has no public JWK');
+    }
 
     const publicKey =
         key.type === 'private'
@@ -198,6 +201,8 @@ export interface JWKS {
     keys: JWK[];
 }
 
+type CachedJWKS = JWKS & { fetchedAt?: number };
+
 export interface JWKSResolver {
     list(): Promise<JWKWithHelpers[]>;
     refresh(): Promise<JWKSResolver>;
@@ -221,10 +226,10 @@ export function JWKSToKeyObject(
 
     let jwk: JWK | undefined;
 
-    if (kid) jwk = jwks.keys.find(k => k.kid === kid);
+    if (kid !== undefined) jwk = jwks.keys.find(k => k.kid === kid);
 
-    // Fallback: single-key JWKS
-    if (!jwk && jwks.keys.length === 1) jwk = jwks.keys[0];
+    // A single key can be selected without a kid, but an explicit kid must match.
+    if (kid === undefined && jwks.keys.length === 1) jwk = jwks.keys[0];
 
     if (!jwk) throw new Error('Key not found in JWKS');
     return importJWK(jwk);
@@ -265,23 +270,28 @@ export const fromWeb = async (
     options: Partial<{
         fetch: typeof fetch;
         ttl: number;
+        maxStaleMs: number;
         timeoutMs: number;
         endpointOverride: string;
         overrideEndpointCheck: boolean;
         cache: {
-            get: (key: string) => JWKS | undefined | Promise<JWKS | undefined>;
-            set: (key: string, value: JWKS) => void | Promise<void>;
+            get: (key: string) => CachedJWKS | undefined | Promise<CachedJWKS | undefined>;
+            set: (key: string, value: CachedJWKS) => void | Promise<void>;
         };
     }> = {}
 ): Promise<JWKSResolver> => {
     const baseUrl = typeof url === 'string' ? url : url.toString();
     const fetchFn = options.fetch ?? globalThis.fetch;
     const ttl = Math.max(0, options.ttl ?? 5 * 60_000);
+    const maxStaleMs = options.maxStaleMs ?? 5 * 60_000;
     const timeoutMs = Math.max(0, options.timeoutMs ?? 5_000);
     const wellKnownPath = '/.well-known/jwks.json';
 
     if (!fetchFn) {
         throw new Error('No fetch implementation available');
+    }
+    if (!Number.isFinite(maxStaleMs) || maxStaleMs < 0) {
+        throw new Error('maxStaleMs must be a non-negative finite number');
     }
 
     const endpoint = (() => {
@@ -307,10 +317,10 @@ export const fromWeb = async (
 
     const cache = (() => {
         if (options.cache) return options.cache;
-        let memoryValue: JWKS | undefined;
+        let memoryValue: CachedJWKS | undefined;
         return {
             get: () => memoryValue,
-            set: (_key: string, value: JWKS) => {
+            set: (_key: string, value: CachedJWKS) => {
                 memoryValue = value;
             }
         };
@@ -318,6 +328,7 @@ export const fromWeb = async (
 
     let cachedJWKS: JWKS | undefined;
     let nextRefreshAt = 0;
+    let lastSuccessfulRefreshAt = 0;
     let refreshInFlight: Promise<JWKS> | undefined;
     let consecutiveFailures = 0;
 
@@ -327,44 +338,48 @@ export const fromWeb = async (
         refreshInFlight = (async () => {
             const controller = new AbortController();
             let timeoutHandle: ReturnType<typeof setTimeout> | undefined;
-
-            if (timeoutMs > 0) {
-                timeoutHandle = setTimeout(() => controller.abort(), timeoutMs);
-            }
-
-            let response: Response;
-            try {
-                response = await fetchFn(endpoint, {signal: controller.signal});
-            } catch (error) {
-                if (controller.signal.aborted) {
-                    throw new Error(`JWKS fetch timed out after ${timeoutMs}ms`);
+            const fetchAndParse = async (): Promise<JWKS> => {
+                const response = await fetchFn(endpoint, {signal: controller.signal});
+                if (!response.ok) {
+                    throw new Error(`Failed to fetch JWKS: ${response.status} ${response.statusText}`);
                 }
-                throw error;
+
+                const body = await response.json();
+                if (!body || typeof body !== 'object' || !Array.isArray((body as any).keys)) {
+                    throw new Error('Invalid JWKS');
+                }
+
+                return normalizeJWKS(body as JWKS);
+            };
+
+            if (timeoutMs === 0) return fetchAndParse();
+
+            const timeout = new Promise<never>((_resolve, reject) => {
+                timeoutHandle = setTimeout(() => {
+                    reject(new Error(`JWKS fetch timed out after ${timeoutMs}ms`));
+                    controller.abort();
+                }, timeoutMs);
+            });
+
+            try {
+                return await Promise.race([fetchAndParse(), timeout]);
             } finally {
                 if (timeoutHandle) clearTimeout(timeoutHandle);
             }
-
-            if (!response.ok) {
-                throw new Error(`Failed to fetch JWKS: ${response.status} ${response.statusText}`);
-            }
-
-            const body = await response.json();
-            if (!body || typeof body !== 'object' || !Array.isArray((body as any).keys)) {
-                throw new Error('Invalid JWKS');
-            }
-
-            return normalizeJWKS(body as JWKS);
         })();
 
         try {
             const fresh = await refreshInFlight;
+            const fetchedAt = Date.now();
+            await cache.set(endpoint, {...fresh, fetchedAt});
             cachedJWKS = fresh;
-            await cache.set(endpoint, fresh);
+            lastSuccessfulRefreshAt = fetchedAt;
             consecutiveFailures = 0;
-            if (ttl > 0) nextRefreshAt = Date.now() + ttl;
+            if (ttl > 0) nextRefreshAt = lastSuccessfulRefreshAt + ttl;
             return fresh;
         } catch (error) {
-            if (!allowStaleOnFailure || !cachedJWKS) {
+            if (!allowStaleOnFailure || !cachedJWKS ||
+                (ttl > 0 && Date.now() >= lastSuccessfulRefreshAt + ttl + maxStaleMs)) {
                 throw error;
             }
 
@@ -385,18 +400,24 @@ export const fromWeb = async (
         }
     };
 
-    cachedJWKS = await cache.get(endpoint);
-    if (!cachedJWKS) {
+    const cachedEntry = await cache.get(endpoint);
+    const cachedAt = cachedEntry?.fetchedAt;
+    const cacheAgeIsKnown = typeof cachedAt === 'number' && Number.isFinite(cachedAt) &&
+        cachedAt > 0 && cachedAt <= Date.now();
+    if (!cachedEntry || (ttl > 0 && (!cacheAgeIsKnown ||
+        Date.now() >= cachedAt + ttl + maxStaleMs))) {
         cachedJWKS = await fetchJWKS(false);
     } else {
-        cachedJWKS = normalizeJWKS(cachedJWKS);
-        if (ttl > 0) nextRefreshAt = Date.now() + ttl;
+        cachedJWKS = normalizeJWKS(cachedEntry);
+        lastSuccessfulRefreshAt = ttl > 0 && cacheAgeIsKnown ? cachedAt : Date.now();
+        if (ttl > 0) nextRefreshAt = lastSuccessfulRefreshAt + ttl;
     }
 
 
     const resolver: JWKSResolver = {
         async list(): Promise<JWKWithHelpers[]> {
-            if (ttl > 0 && Date.now() >= nextRefreshAt) {
+            if (ttl > 0 && (Date.now() >= nextRefreshAt ||
+                Date.now() >= lastSuccessfulRefreshAt + ttl + maxStaleMs)) {
                 await fetchJWKS(true);
             }
             return normalizeJWK(...(cachedJWKS as JWKS).keys);
@@ -433,6 +454,9 @@ export const fromWeb = async (
             return resolver.find(input).then(([key]) => key);
         },
         export(): JWKS | undefined {
+            if (ttl > 0 && Date.now() >= lastSuccessfulRefreshAt + ttl + maxStaleMs) {
+                return undefined;
+            }
             return cachedJWKS;
         }
     };

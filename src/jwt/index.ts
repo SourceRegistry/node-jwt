@@ -862,7 +862,7 @@ export const verify = (
     const skew = options.clockSkew ?? 0;
 
     if (!options.ignoreExpiration) {
-        if (payload.exp !== undefined && now > payload.exp + skew) {
+        if (payload.exp !== undefined && now >= payload.exp + skew) {
             return {
                 valid: false,
                 error: {

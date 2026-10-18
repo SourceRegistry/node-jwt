@@ -362,6 +362,19 @@ describe('JWT Library', () => {
                 if (!result.valid) expect(result.error.code).toBe('TOKEN_EXPIRED');
             });
 
+            it('should reject a token at its exact expiration second', () => {
+                const expiration = 1_700_000_000;
+                const nowSpy = vi.spyOn(Date, 'now').mockReturnValue(expiration * 1000);
+                try {
+                    const token = sign({...basePayload, exp: expiration}, hmacSecret);
+                    const result = verify(token, hmacSecret);
+                    expect(result.valid).toBe(false);
+                    if (!result.valid) expect(result.error.code).toBe('TOKEN_EXPIRED');
+                } finally {
+                    nowSpy.mockRestore();
+                }
+            });
+
             it('should accept expired token when ignoreExpiration=true', () => {
                 const token = sign({...basePayload, exp: past}, hmacSecret);
                 const result = verify(token, hmacSecret, {ignoreExpiration: true});

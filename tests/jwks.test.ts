@@ -23,6 +23,11 @@ describe('JWK and JWKS extensions', () => {
             expect((jwk as any).d).toBeUndefined();
         });
 
+        it('rejects a symmetric key when exporting a public JWK', () => {
+            const secret = createSecretKey(Buffer.from('private-signing-secret'));
+            expect(() => JWK.toPublic(secret)).toThrow('A symmetric secret key has no public JWK');
+        });
+
         it('creates RFC 7638 thumbprint', () => {
             const { publicKey } = generateKeyPairSync('ed25519');
             const jwk = JWK.export(publicKey);
@@ -74,6 +79,13 @@ describe('JWK and JWKS extensions', () => {
 
             const key = JWKS.toKeyObject({ keys: [jwk] });
             expect(key.asymmetricKeyType).toBe('rsa');
+        });
+
+        it('rejects a mismatched kid even when the JWKS has one key', () => {
+            const { publicKey } = generateKeyPairSync('ed25519');
+            const jwk = JWK.export(publicKey);
+            jwk.kid = 'expected';
+            expect(() => JWKS.toKeyObject({ keys: [jwk] }, 'wrong')).toThrow('Key not found in JWKS');
         });
 
         it('throws when key not found in JWKS', () => {
@@ -325,6 +337,17 @@ describe('JWK and JWKS extensions', () => {
             ).rejects.toThrow('JWKS fetch timed out after 10ms');
         });
 
+        it('fromWeb times out while reading the response body', async () => {
+            const fetchMock = vi.fn(async () => ({
+                ok: true,
+                json: () => new Promise<unknown>(() => undefined)
+            })) as unknown as typeof fetch;
+
+            await expect(
+                JWKS.fromWeb('https://issuer.example', { fetch: fetchMock, timeoutMs: 10 })
+            ).rejects.toThrow('JWKS fetch timed out after 10ms');
+        });
+
         it('fromWeb throws when no fetch implementation is available', async () => {
             vi.stubGlobal('fetch', undefined as any);
 
@@ -410,7 +433,7 @@ describe('JWK and JWKS extensions', () => {
             }) as unknown as typeof fetch;
 
             const cache = {
-                get: vi.fn(async () => ({ keys: [jwk] })),
+                get: vi.fn(async () => ({ keys: [jwk], fetchedAt: Date.now() })),
                 set: vi.fn(async () => undefined)
             };
 
@@ -530,6 +553,71 @@ describe('JWK and JWKS extensions', () => {
             } finally {
                 warnSpy.mockRestore();
             }
+        });
+
+        it('fromWeb stops serving stale keys after maxStaleMs despite refresh backoff', async () => {
+            const { publicKey } = generateKeyPairSync('ed25519');
+            const jwk = JWK.export(publicKey);
+            jwk.kid = 'old';
+            const fetchMock = vi.fn(async () => {
+                if (fetchMock.mock.calls.length === 1) {
+                    return { ok: true, json: async () => ({ keys: [jwk] }) };
+                }
+                throw new Error('network failure');
+            }) as unknown as typeof fetch;
+            const start = Date.now();
+            const nowSpy = vi.spyOn(Date, 'now').mockReturnValue(start);
+            const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+
+            try {
+                const resolver = await JWKS.fromWeb('https://issuer.example', {
+                    fetch: fetchMock, ttl: 1000, maxStaleMs: 1000
+                });
+                nowSpy.mockReturnValue(start + 1001);
+                expect((await resolver.key('old'))?.kid).toBe('old');
+
+                nowSpy.mockReturnValue(start + 2000);
+                await expect(resolver.key('old')).rejects.toThrow('network failure');
+                expect(resolver.export()).toBeUndefined();
+                expect(fetchMock).toHaveBeenCalledTimes(3);
+            } finally {
+                nowSpy.mockRestore();
+                warnSpy.mockRestore();
+            }
+        });
+
+        it('fromWeb revalidates a cached JWKS without a known fetch time', async () => {
+            const { publicKey } = generateKeyPairSync('ed25519');
+            const jwk = JWK.export(publicKey);
+            jwk.kid = 'cached';
+            const cache = {
+                get: vi.fn(async () => ({ keys: [jwk] })),
+                set: vi.fn(async () => undefined)
+            };
+            const fetchMock = vi.fn(async () => {
+                throw new Error('refresh failed');
+            }) as unknown as typeof fetch;
+
+            await expect(JWKS.fromWeb('https://issuer.example', {
+                cache, fetch: fetchMock, ttl: 1000
+            })).rejects.toThrow('refresh failed');
+            expect(fetchMock).toHaveBeenCalledTimes(1);
+        });
+
+        it('fromWeb rejects an expired persisted JWKS when revalidation fails', async () => {
+            const { publicKey } = generateKeyPairSync('ed25519');
+            const jwk = JWK.export(publicKey);
+            const cache = {
+                get: vi.fn(async () => ({ keys: [jwk], fetchedAt: Date.now() - 3000 })),
+                set: vi.fn(async () => undefined)
+            };
+            const fetchMock = vi.fn(async () => {
+                throw new Error('refresh failed');
+            }) as unknown as typeof fetch;
+
+            await expect(JWKS.fromWeb('https://issuer.example', {
+                cache, fetch: fetchMock, ttl: 1000, maxStaleMs: 1000
+            })).rejects.toThrow('refresh failed');
         });
 
         it('fromWeb deduplicates concurrent refresh calls', async () => {
