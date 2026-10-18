@@ -1,3 +1,10 @@
+## [1.6.1](https://github.com/SourceRegistry/node-jwt/compare/v1.6.0...v1.6.1) (2026-10-18)
+
+
+### Bug Fixes
+
+* secure JWT verification and JWKS key handling ([d636bbc](https://github.com/SourceRegistry/node-jwt/commit/d636bbc66519b998cc7e1ce8031a815394060659))
+
 # [1.6.0](https://github.com/SourceRegistry/node-jwt/compare/v1.5.11...v1.6.0) (2026-08-29)
 
 
